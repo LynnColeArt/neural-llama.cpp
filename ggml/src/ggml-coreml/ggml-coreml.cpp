@@ -4,6 +4,7 @@
 #include "ggml-impl.h"
 #include "ggml-metal.h"
 
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <cstdio>
@@ -47,19 +48,29 @@ static ggml_backend_t ggml_backend_coreml_from_metal_backend(ggml_backend_t back
     return backend_ctx->metal_backend;
 }
 
+static std::string ggml_coreml_to_lower(const std::string & input) {
+    std::string lower = input;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) {
+        return std::tolower(ch);
+    });
+    return lower;
+}
+
 static bool ggml_coreml_output_contains_npu(const std::string & output) {
-    if (output.find("aneDevicePropertyNumANECores") != std::string::npos) {
-        const size_t pos = output.find("aneDevicePropertyNumANECores");
-        const size_t eq = output.find('=', pos);
+    const std::string lower = ggml_coreml_to_lower(output);
+    const std::string core_key = "anedevicepropertynumanecores";
+    const size_t pos = lower.find(core_key);
+    if (pos != std::string::npos) {
+        const size_t eq = lower.find('=', pos);
         if (eq != std::string::npos) {
             size_t i = eq + 1;
-            while (i < output.size() && !std::isdigit(static_cast<unsigned char>(output[i]))) {
+            while (i < lower.size() && !std::isdigit(static_cast<unsigned char>(lower[i]))) {
                 ++i;
             }
-            if (i < output.size()) {
+            if (i < lower.size()) {
                 int value = 0;
-                while (i < output.size() && std::isdigit(static_cast<unsigned char>(output[i]))) {
-                    value = (value * 10) + (output[i] - '0');
+                while (i < lower.size() && std::isdigit(static_cast<unsigned char>(lower[i]))) {
+                    value = (value * 10) + (lower[i] - '0');
                     ++i;
                 }
                 if (value > 0) {
@@ -69,11 +80,15 @@ static bool ggml_coreml_output_contains_npu(const std::string & output) {
         }
     }
 
-    if (output.find("aneDevicePropertyANEVersion") != std::string::npos) {
+    if (lower.find("anedevicepropertyaneversion") != std::string::npos) {
         return true;
     }
 
-    if (output.find("ANEHWDevice") != std::string::npos) {
+    if (
+        lower.find("anehwdevice") != std::string::npos
+        || lower.find("aneclientdevice") != std::string::npos
+        || lower.find("h11anein") != std::string::npos
+    ) {
         return true;
     }
 
@@ -106,6 +121,21 @@ static bool ggml_coreml_probe_ioreg_npu() {
         }
 
         if (ggml_coreml_output_contains_npu(output)) {
+            return true;
+        }
+    }
+
+    const char * profiler_cmd = "system_profiler SPHardwareDataType 2>/dev/null";
+    FILE * profiler_pipe = popen(profiler_cmd, "r");
+    if (profiler_pipe != nullptr) {
+        std::string profiler_output;
+        char buffer[1024];
+        while (fgets(buffer, sizeof(buffer), profiler_pipe) != nullptr) {
+            profiler_output += buffer;
+        }
+
+        const int profiler_rc = pclose(profiler_pipe);
+        if (profiler_rc == 0 && ggml_coreml_output_contains_npu(profiler_output)) {
             return true;
         }
     }
