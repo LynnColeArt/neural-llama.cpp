@@ -1,7 +1,9 @@
 # Apple Silicon NPU (CoreML) in llama.cpp
 
 This fork documents the Apple Silicon NPU path in `llama.cpp` when running on macOS systems with Neural Engine hardware.
-On Apple Silicon, Busy defaults to CoreML/NPU when available and falls back to Metal when unavailable unless explicitly disabled by environment.
+Busy requires a checkout with native CoreML backend support to use NPU on Apple Silicon.
+On Apple Silicon with NPU, Busy fails fast if `GGML_COREML` is not enabled.
+Metal fallback is disabled by default and can only be enabled explicitly.
 
 ## Requirements
 
@@ -41,6 +43,7 @@ build/bin/llama-server \
 
 ## Related Notes
 
-- The Busy integration keeps a fallback to Metal when CoreML is unavailable.
-- If you need to disable this fallback at startup, set `LLAMA_COREML_FALLBACK=0`.
-- For a one-command path from Busy, pass `--llama-backend npu` and keep the `llama.cpp` source checkout aligned to this fork.
+- Busy keeps Metal fallback as an explicit opt-in path for CoreML/NPU requests:
+  - set `LLAMA_COREML_FALLBACK=1` (or `--llama-coreml-fallback`) when using `setup.py`.
+- By default, if NPU is available and `-DGGML_COREML=ON` is absent, setup will fail with an error.
+- For a one-command path from Busy, pass `--llama-backend npu` and keep the `llama.cpp` source checkout aligned to a CoreML-capable revision.

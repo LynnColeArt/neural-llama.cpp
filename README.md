@@ -9,6 +9,8 @@
 > [!NOTE]
 > This is a working fork of llama.cpp that adds Apple Silicon NPU support.
 > The NPU port was authored by Lynn Cole & Samuel Goff.
+> CoreML-only hardware acceleration is used on NPU-capable Macs when built with CoreML support;
+> Metal fallback is available only when explicitly enabled.
 > See [Apple Silicon NPU (CoreML)](docs/backend/COREML.md) for build and runtime notes.
 
 [Manifesto](https://github.com/ggml-org/llama.cpp/discussions/205) / [ggml](https://github.com/ggml-org/ggml) / [ops](https://github.com/ggml-org/llama.cpp/blob/master/docs/ops.md)

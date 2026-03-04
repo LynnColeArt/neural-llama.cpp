@@ -231,6 +231,14 @@ option(GGML_ZDNN                            "ggml: use zDNN"                    
 option(GGML_VIRTGPU                         "ggml: use the VirtGPU/Virglrenderer API Remoting frontend"     OFF)
 option(GGML_VIRTGPU_BACKEND                 "ggml: build the VirtGPU/Virglrenderer API Remoting backend"    OFF)
 option(GGML_METAL                           "ggml: use Metal"                                 ${GGML_METAL_DEFAULT})
+option(GGML_COREML                          "ggml: use CoreML (Apple Silicon NPU delegate)"      OFF)
+if (GGML_COREML AND NOT GGML_METAL)
+    # CoreML backend delegates through Metal/Apple GPU plumbing in this fork.
+    set(GGML_METAL ON CACHE BOOL "CoreML requires Metal backend in this tree" FORCE)
+endif()
+if (GGML_COREML AND NOT CMAKE_SYSTEM_NAME MATCHES "Darwin")
+    message(FATAL_ERROR "GGML_COREML is supported only on Apple platforms in this fork.")
+endif()
 option(GGML_METAL_NDEBUG                    "ggml: disable Metal debugging"                   OFF)
 option(GGML_METAL_SHADER_DEBUG              "ggml: compile Metal with -fno-fast-math"         OFF)
 option(GGML_METAL_EMBED_LIBRARY             "ggml: embed Metal library"                       ${GGML_METAL})
@@ -321,6 +329,7 @@ set(GGML_PUBLIC_HEADERS
     include/ggml-cuda.h
     include/ggml-opt.h
     include/ggml-metal.h
+    include/ggml-coreml.h
     include/ggml-rpc.h
     include/ggml-virtgpu.h
     include/ggml-sycl.h
