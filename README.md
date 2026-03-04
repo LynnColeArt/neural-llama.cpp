@@ -6,6 +6,10 @@
 [![Release](https://img.shields.io/github/v/release/ggml-org/llama.cpp)](https://github.com/ggml-org/llama.cpp/releases)
 [![Server](https://github.com/ggml-org/llama.cpp/actions/workflows/server.yml/badge.svg)](https://github.com/ggml-org/llama.cpp/actions/workflows/server.yml)
 
+> [!NOTE]
+> This is a working fork of llama.cpp that adds Apple Silicon NPU support.
+> The NPU port was authored by Lynn Cole & Samuel Goff.
+
 [Manifesto](https://github.com/ggml-org/llama.cpp/discussions/205) / [ggml](https://github.com/ggml-org/ggml) / [ops](https://github.com/ggml-org/llama.cpp/blob/master/docs/ops.md)
 
 LLM inference in C/C++
@@ -273,6 +277,7 @@ Instructions for adding support for new models: [HOWTO-add-model.md](docs/develo
 
 | Backend | Target devices |
 | --- | --- |
+| NPU (CoreML) | Apple Silicon (Neural Engine) |
 | [Metal](docs/build.md#metal-build) | Apple Silicon |
 | [BLAS](docs/build.md#blas-build) | All |
 | [BLIS](docs/backend/BLIS.md) | All |
