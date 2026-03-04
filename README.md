@@ -12,6 +12,7 @@
 > CoreML-only hardware acceleration is used on NPU-capable Macs when built with CoreML support;
 > Metal fallback is available only when explicitly enabled.
 > See [Apple Silicon NPU (CoreML)](docs/backend/COREML.md) for build and runtime notes.
+> M1 Max benchmark baselines are tracked in [M1_MAX_BENCHMARKS.md](./M1_MAX_BENCHMARKS.md).
 
 [Manifesto](https://github.com/ggml-org/llama.cpp/discussions/205) / [ggml](https://github.com/ggml-org/ggml) / [ops](https://github.com/ggml-org/llama.cpp/blob/master/docs/ops.md)
 
