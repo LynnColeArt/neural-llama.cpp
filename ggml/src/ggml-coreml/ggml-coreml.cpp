@@ -88,6 +88,7 @@ static bool ggml_coreml_output_contains_npu(const std::string & output) {
         lower.find("anehwdevice") != std::string::npos
         || lower.find("aneclientdevice") != std::string::npos
         || lower.find("h11anein") != std::string::npos
+        || lower.find("neural engine") != std::string::npos
     ) {
         return true;
     }
@@ -95,52 +96,76 @@ static bool ggml_coreml_output_contains_npu(const std::string & output) {
     return false;
 }
 
+static bool ggml_coreml_check_command_available(const std::string & binary_name) {
+    std::string check_cmd = std::string("command -v \"") + binary_name + "\" >/dev/null 2>&1";
+    FILE * pipe = popen(check_cmd.c_str(), "r");
+    if (pipe == nullptr) {
+        return false;
+    }
+    const int rc = pclose(pipe);
+    return rc == 0;
+}
+
+static bool ggml_coreml_run_probe_command(const std::string & cmd, std::string & output) {
+    FILE * pipe = popen(cmd.c_str(), "r");
+    if (pipe == nullptr) {
+        return false;
+    }
+
+    output.clear();
+    char buffer[1024];
+    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        output += buffer;
+    }
+
+    const int rc = pclose(pipe);
+    return rc == 0;
+}
+
 static bool ggml_coreml_probe_ioreg_npu() {
-    static const std::array<const char *, 3> classes = {
+    static const std::array<const char *, 4> classes = {
         "H11ANEIn",
+        "ANE",
         "ANEHWDevice",
         "ANEClientDevice",
     };
 
-    for (const auto & class_name : classes) {
-        const std::string cmd = std::string("ioreg -r -c ") + class_name + " -d1 2>/dev/null";
-        FILE * pipe = popen(cmd.c_str(), "r");
-        if (pipe == nullptr) {
-            continue;
-        }
-
-        std::string output;
-        char buffer[1024];
-        while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-            output += buffer;
-        }
-
-        const int rc = pclose(pipe);
-        if (rc != 0) {
-            continue;
-        }
-
-        if (ggml_coreml_output_contains_npu(output)) {
-            return true;
+    const bool has_ioreg = ggml_coreml_check_command_available("ioreg");
+    if (has_ioreg) {
+        for (const auto & class_name : classes) {
+            std::string cmd = std::string("ioreg -r -c ") + class_name + " -d1 2>/dev/null";
+            std::string output;
+            if (!ggml_coreml_run_probe_command(cmd, output)) {
+                continue;
+            }
+            if (ggml_coreml_output_contains_npu(output)) {
+                return true;
+            }
         }
     }
 
-    const char * profiler_cmd = "system_profiler SPHardwareDataType 2>/dev/null";
-    FILE * profiler_pipe = popen(profiler_cmd, "r");
-    if (profiler_pipe != nullptr) {
-        std::string profiler_output;
-        char buffer[1024];
-        while (fgets(buffer, sizeof(buffer), profiler_pipe) != nullptr) {
-            profiler_output += buffer;
-        }
+    const bool has_system_profiler = ggml_coreml_check_command_available("system_profiler");
+    if (!has_system_profiler) {
+        return false;
+    }
 
-        const int profiler_rc = pclose(profiler_pipe);
-        if (profiler_rc == 0 && ggml_coreml_output_contains_npu(profiler_output)) {
+    std::string profiler_output;
+    if (ggml_coreml_run_probe_command("system_profiler SPHardwareDataType 2>/dev/null", profiler_output)) {
+        if (ggml_coreml_output_contains_npu(profiler_output)) {
             return true;
         }
     }
 
     return false;
+}
+
+static bool ggml_coreml_is_apple_silicon_with_npu(void) {
+#if defined(__aarch64__) || defined(__arm64__)
+    return true;
+#else
+    return false;
+#endif
+
 }
 
 static bool ggml_coreml_is_npu_available(void) {
@@ -154,6 +179,9 @@ static bool ggml_coreml_is_npu_available(void) {
 
 #if defined(__APPLE__)
     available = ggml_coreml_probe_ioreg_npu();
+    if (!available) {
+        available = ggml_coreml_is_apple_silicon_with_npu();
+    }
 #else
     available = false;
 #endif
@@ -410,14 +438,12 @@ static void * ggml_backend_coreml_get_proc_address(ggml_backend_reg_t reg, const
     return ggml_backend_reg_get_proc_address(metal_reg, name);
 }
 
-#ifdef GGML_USE_METAL
 static const ggml_backend_reg_i ggml_backend_coreml_reg_i = {
     /* .get_name         = */ ggml_backend_coreml_reg_get_name,
     /* .get_device_count = */ ggml_backend_coreml_reg_get_device_count,
     /* .get_device       = */ ggml_backend_coreml_reg_get_device,
     /* .get_proc_address = */ ggml_backend_coreml_get_proc_address,
 };
-#endif
 
 static ggml_backend_dev_t ggml_backend_coreml_device_new(ggml_backend_reg_t reg, int index, ggml_backend_dev_t metal_dev) {
     auto * coreml_dev = new ggml_backend_coreml_device {
@@ -470,7 +496,6 @@ ggml_backend_reg_t ggml_backend_coreml_reg(void) {
         static std::vector<ggml_coreml_device_ptr> device_storage;
 
         if (!initialized) {
-#ifdef GGML_USE_METAL
             ggml_backend_reg_t metal_reg = ggml_backend_metal_reg();
             if (metal_reg == NULL) {
                 return NULL;
@@ -497,9 +522,6 @@ ggml_backend_reg_t ggml_backend_coreml_reg(void) {
                 /* .iface       = */ ggml_backend_coreml_reg_i,
                 /* .context     = */ reg_ctx.get(),
             };
-#else
-            return NULL;
-#endif
 
             initialized = true;
         }
