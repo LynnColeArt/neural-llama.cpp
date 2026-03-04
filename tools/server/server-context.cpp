@@ -743,7 +743,9 @@ private:
 
         slots.clear();
 
-        const bool can_spec = common_speculative_is_compat(ctx);
+        const bool can_spec =
+            params_base.speculative.type != COMMON_SPECULATIVE_TYPE_NONE &&
+            common_speculative_is_compat(ctx);
         if (!can_spec) {
             SRV_WRN("%s", "speculative decoding not supported by this context\n");
         }

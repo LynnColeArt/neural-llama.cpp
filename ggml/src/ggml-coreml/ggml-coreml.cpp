@@ -212,14 +212,31 @@ static void ggml_backend_coreml_get_tensor_async(ggml_backend_t backend, const g
     ggml_backend_tensor_get_async(ggml_backend_coreml_from_metal_backend(backend), tensor, data, offset, size);
 }
 
-static bool ggml_backend_coreml_cpy_tensor_async(ggml_backend_t backend_src, ggml_backend_t backend_dst, const ggml_tensor * src, ggml_tensor * dst) {
-    ggml_backend_tensor_copy_async(
-        ggml_backend_coreml_from_metal_backend(backend_src),
-        ggml_backend_coreml_from_metal_backend(backend_dst),
-        const_cast<ggml_tensor *>(src),
-        dst
-    );
+static ggml_backend_t ggml_backend_coreml_unwrap_if_needed(ggml_backend_t backend) {
+    if (backend == NULL) {
+        return NULL;
+    }
+    if (!ggml_backend_is_coreml(backend)) {
+        return backend;
+    }
 
+    auto * backend_ctx = (ggml_coreml_backend_context_t)backend->context;
+    if (backend_ctx == NULL) {
+        return NULL;
+    }
+
+    return backend_ctx->metal_backend;
+}
+
+static bool ggml_backend_coreml_cpy_tensor_async(ggml_backend_t backend_src, ggml_backend_t backend_dst, const ggml_tensor * src, ggml_tensor * dst) {
+    ggml_backend_t src_backend = ggml_backend_coreml_unwrap_if_needed(backend_src);
+    ggml_backend_t dst_backend = ggml_backend_coreml_unwrap_if_needed(backend_dst);
+
+    if (src_backend == NULL || dst_backend == NULL) {
+        return false;
+    }
+
+    ggml_backend_tensor_copy_async(src_backend, dst_backend, const_cast<ggml_tensor *>(src), dst);
     return true;
 }
 
