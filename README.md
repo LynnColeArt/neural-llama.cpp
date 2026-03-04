@@ -9,6 +9,7 @@
 > [!NOTE]
 > This is a working fork of llama.cpp that adds Apple Silicon NPU support.
 > The NPU port was authored by Lynn Cole & Samuel Goff.
+> See [Apple Silicon NPU (CoreML)](docs/backend/COREML.md) for build and runtime notes.
 
 [Manifesto](https://github.com/ggml-org/llama.cpp/discussions/205) / [ggml](https://github.com/ggml-org/ggml) / [ops](https://github.com/ggml-org/llama.cpp/blob/master/docs/ops.md)
 
@@ -41,6 +42,7 @@ Getting started with llama.cpp is straightforward. Here are several ways to inst
 - Run with Docker - see our [Docker documentation](docs/docker.md)
 - Download pre-built binaries from the [releases page](https://github.com/ggml-org/llama.cpp/releases)
 - Build from source by cloning this repository - check out [our build guide](docs/build.md)
+- Apple Silicon NPU users should use [CoreML/NPU setup notes](docs/backend/COREML.md) and set NPU-related flags accordingly.
 
 Once installed, you'll need a model to work with. Head to the [Obtaining and quantizing models](#obtaining-and-quantizing-models) section to learn more.
 
@@ -277,7 +279,7 @@ Instructions for adding support for new models: [HOWTO-add-model.md](docs/develo
 
 | Backend | Target devices |
 | --- | --- |
-| NPU (CoreML) | Apple Silicon (Neural Engine) |
+| [NPU (CoreML)](docs/backend/COREML.md) | Apple Silicon (Neural Engine) |
 | [Metal](docs/build.md#metal-build) | Apple Silicon |
 | [BLAS](docs/build.md#blas-build) | All |
 | [BLIS](docs/backend/BLIS.md) | All |
