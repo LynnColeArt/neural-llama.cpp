@@ -2795,6 +2795,13 @@ const char * llm_arch_name(llm_arch arch) {
 }
 
 llm_arch llm_arch_from_string(const std::string & name) {
+    if (name == "qwen3.5" || name == "qwen-35") {
+        return LLM_ARCH_QWEN35;
+    }
+    if (name == "qwen3.5moe" || name == "qwen-35moe") {
+        return LLM_ARCH_QWEN35MOE;
+    }
+
     for (const auto & kv : LLM_ARCH_NAMES) { // NOLINT
         if (kv.second == name) {
             return kv.first;
