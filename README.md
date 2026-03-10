@@ -600,3 +600,20 @@ $ echo "source ~/.llama-completion.bash" >> ~/.bashrc
 - [nlohmann/json](https://github.com/nlohmann/json) - Single-header JSON library, used by various tools/examples - MIT License
 - [miniaudio.h](https://github.com/mackron/miniaudio) - Single-header audio format decoder, used by multimodal subsystem - Public domain
 - [subprocess.h](https://github.com/sheredom/subprocess.h) - Single-header process launching solution for C and C++ - Public domain
+
+## AI-Generated / Automated Contributions
+
+This fork accepts human-written, AI-assisted, automated, and predominantly AI-generated contributions.
+Agents are welcome here.
+
+Changes are evaluated on correctness, clarity, test coverage, maintainability, and reviewer confidence, not on whether a model helped produce them.
+This fork's contribution policy is intentionally maintained independently from upstream llama.cpp.
+
+Before submitting automated or generated changes, verify:
+
+- No production or runtime path includes placeholders, temporary stubs, or knowingly incomplete behavior.
+- Behavioral changes include focused tests or validation and the results are reported.
+- Errors and edge cases are handled explicitly rather than hidden behind silent fallback behavior.
+- API, server, and backend behavior changes are documented in the nearest relevant docs.
+- Substantial architectural changes include enough design context for review.
+- The submitter can explain and maintain the change after merge.

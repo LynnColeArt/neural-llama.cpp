@@ -99,6 +99,12 @@ struct server_slot {
     slot_state state = SLOT_STATE_IDLE;
 
     server_prompt prompt;
+    bool has_session_identity = false;
+    std::string session_key;
+    std::string lineage_key;
+    std::string priority_class;
+    std::string affinity_hint;
+    std::string source_kind;
 
     void prompt_save(server_prompt_cache & prompt_cache) const {
         GGML_ASSERT(prompt.data.size() == 0);
@@ -254,6 +260,29 @@ struct server_slot {
 
     bool is_processing() const {
         return state != SLOT_STATE_IDLE;
+    }
+
+    void update_scheduler_identity(const server_task & task) {
+        if (!task.scheduler_meta.has_session_key) {
+            has_session_identity = false;
+            session_key.clear();
+            lineage_key.clear();
+            priority_class.clear();
+            affinity_hint.clear();
+            source_kind.clear();
+            return;
+        }
+
+        has_session_identity = true;
+        session_key = task.scheduler_meta.session_key;
+        lineage_key = task.scheduler_meta.lineage_key;
+        priority_class = task.scheduler_meta.priority_class;
+        affinity_hint = task.scheduler_meta.affinity_hint;
+        source_kind = task.scheduler_meta.source_kind;
+    }
+
+    bool matches_session_key(const std::string & value) const {
+        return has_session_identity && session_key == value;
     }
 
     bool can_speculate() const {
@@ -925,6 +954,17 @@ private:
 
         bool update_cache = false;
 
+        if (task.scheduler_meta.has_session_key) {
+            for (auto & slot : slots) {
+                if (slot.is_processing()) {
+                    continue;
+                }
+                if (slot.matches_session_key(task.scheduler_meta.session_key)) {
+                    return &slot;
+                }
+            }
+        }
+
         // find the slot that has at least n% prompt similarity
         if (ret == nullptr && slot_prompt_similarity != 0.0f) {
             float sim_best = 0;
@@ -1174,6 +1214,7 @@ private:
         }
 
         slot.task = std::make_unique<const server_task>(std::move(task));
+        slot.update_scheduler_identity(*slot.task);
 
         slot.state = slot.task->is_child()
             ? SLOT_STATE_WAIT_OTHER // wait for the parent to process prompt
@@ -1612,6 +1653,20 @@ private:
         return free_slots;
     }
 
+    server_slot * get_active_slot_for_session(const server_task & task) {
+        if (!task.scheduler_meta.has_session_key) {
+            return nullptr;
+        }
+
+        for (auto & slot : slots) {
+            if (slot.is_processing() && slot.matches_session_key(task.scheduler_meta.session_key)) {
+                return &slot;
+            }
+        }
+
+        return nullptr;
+    }
+
     // launch multiple slots for parent + child tasks
     bool launch_slots_with_parent_task(server_slot & parent_slot, std::vector<server_slot *> & child_slots, server_task && parent_task) {
         GGML_ASSERT(!parent_slot.is_processing());
@@ -1674,6 +1729,12 @@ private:
 
                     const int id_slot = task.id_slot;
                     const int id_task = task.id;
+
+                    if (!task.is_child() && get_active_slot_for_session(task) != nullptr) {
+                        SRV_DBG("requested session is already active, defer task, id_task = %d\n", id_task);
+                        queue_tasks.defer(std::move(task));
+                        break;
+                    }
 
                     server_slot * slot = id_slot != -1
                                             ? get_slot_by_id(id_slot)
@@ -2973,6 +3034,7 @@ std::unique_ptr<server_res_generator> server_routes::handle_completions_impl(
 
     try {
         std::vector<server_task> tasks;
+        const auto scheduler_meta = server_task::scheduler_meta_from_request(data, req.headers);
 
         const auto & prompt = data.at("prompt");
         // TODO: this log can become very long, put it behind a flag or think about a more compact format
@@ -3002,6 +3064,7 @@ std::unique_ptr<server_res_generator> server_routes::handle_completions_impl(
                     params,
                     meta->slot_n_ctx,
                     data);
+            task.scheduler_meta = scheduler_meta;
             task.id_slot = json_value(data, "id_slot", -1);
 
             // OAI-compat
@@ -3020,7 +3083,7 @@ std::unique_ptr<server_res_generator> server_routes::handle_completions_impl(
             tasks.push_back(std::move(task));
         }
 
-        rd.post_tasks(std::move(tasks));
+        rd.post_tasks(std::move(tasks), scheduler_meta.is_interactive());
     } catch (const std::exception & e) {
         res->error(format_error_response(e.what(), ERROR_TYPE_INVALID_REQUEST));
         return res;

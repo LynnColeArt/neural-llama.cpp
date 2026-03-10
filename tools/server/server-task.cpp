@@ -8,6 +8,9 @@
 #include "speculative.h"
 #include "json-schema-to-grammar.h"
 
+#include <algorithm>
+#include <cctype>
+
 using json = nlohmann::ordered_json;
 
 //
@@ -507,6 +510,96 @@ task_params server_task::params_from_json_cmpl(
     }
 
     return params;
+}
+
+namespace {
+std::string to_lower_copy(const std::string & value) {
+    std::string lowered(value.size(), '\0');
+    std::transform(value.begin(), value.end(), lowered.begin(), [](unsigned char c) { return std::tolower(c); });
+    return lowered;
+}
+
+std::string request_header_get(const std::map<std::string, std::string> & headers, const std::string & key) {
+    const auto key_l = to_lower_copy(key);
+    for (const auto & [header_name, header_value] : headers) {
+        if (to_lower_copy(header_name) == key_l) {
+            return header_value;
+        }
+    }
+    return {};
+}
+
+std::string get_string_field(
+        const json & metadata,
+        const std::map<std::string, std::string> & headers,
+        const std::string & header_name,
+        const std::string & metadata_name,
+        const std::string & fallback = std::string()) {
+    const auto header_value = request_header_get(headers, header_name);
+    if (!header_value.empty()) {
+        return header_value;
+    }
+
+    if (metadata.contains(metadata_name) && metadata.at(metadata_name).is_string()) {
+        return json_value(metadata, metadata_name, fallback);
+    }
+    return fallback;
+}
+
+bool parse_interruptibility(
+    const json & metadata,
+    const std::map<std::string, std::string> & headers,
+    const bool fallback) {
+    const std::string header_value = request_header_get(headers, "X-Neural-Interruptibility");
+    if (!header_value.empty()) {
+        const auto lowered = to_lower_copy(header_value);
+        if (lowered == "1" || lowered == "true" || lowered == "yes" || lowered == "on") {
+            return true;
+        } else if (lowered == "0" || lowered == "false" || lowered == "no" || lowered == "off") {
+            return false;
+        }
+        SRV_WRN("invalid X-Neural-Interruptibility value \"%s\", using fallback %d\n", header_value.c_str(), (int)fallback);
+        return fallback;
+    }
+
+    if (!metadata.contains("interruptibility")) {
+        return fallback;
+    }
+
+    return json_value(metadata, "interruptibility", fallback);
+}
+} // namespace
+
+server_task_scheduler_meta server_task::scheduler_meta_from_request(
+        const json & data,
+        const std::map<std::string, std::string> & headers) {
+    const auto metadata = data.contains("metadata") && data.at("metadata").is_object()
+        ? data.at("metadata")
+        : json::object();
+
+    server_task_scheduler_meta out;
+
+    out.session_key = get_string_field(metadata, headers, "X-Neural-Session-Key", "session_key");
+    out.has_session_key = !out.session_key.empty();
+
+    out.lineage_key = get_string_field(metadata, headers, "X-Neural-Lineage-Key", "lineage_key");
+    out.has_lineage_key = !out.lineage_key.empty();
+
+    out.request_class = to_lower_copy(
+        get_string_field(metadata, headers, "X-Neural-Request-Class", "request_class", "default")
+    );
+    out.priority_class = to_lower_copy(
+        get_string_field(metadata, headers, "X-Neural-Priority-Class", "priority_class", "background")
+    );
+    out.affinity_hint = to_lower_copy(
+        get_string_field(metadata, headers, "X-Neural-Affinity-Hint", "affinity_hint", std::string())
+    );
+    out.source_kind = to_lower_copy(
+        get_string_field(metadata, headers, "X-Neural-Source-Kind", "source_kind", std::string())
+    );
+    out.interruptible = parse_interruptibility(metadata, headers, true);
+
+    return out;
 }
 
 //
