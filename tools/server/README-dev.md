@@ -4,6 +4,15 @@ This document provides an in-depth technical overview of `llama-server`, intende
 
 If you are an end user consuming `llama-server` as a product, please refer to the main [README](./README.md) instead.
 
+Experimental design note:
+
+- [Lane manager and session parking](./LANE_MANAGER_SESSION_PARKING_SPEC.md)
+  documents an actor-oriented runtime experiment for caller-oblivious
+  multi-lane scheduling behind the existing completion surface.
+- [Lane manager and session parking project plan](./LANE_MANAGER_SESSION_PARKING_PROJECT_PLAN.md)
+  tracks the v1 decisions, roadmap, task list, and backlog for that
+  experiment.
+
 ## Backend
 
 ### Overview

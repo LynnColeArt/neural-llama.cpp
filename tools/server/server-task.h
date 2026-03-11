@@ -38,6 +38,22 @@ enum task_response_type {
     TASK_RESPONSE_TYPE_ANTHROPIC,
 };
 
+struct server_task_scheduler_meta {
+    std::string session_key;
+    std::string lineage_key;
+    std::string request_class;
+    std::string priority_class;
+    std::string affinity_hint;
+    bool interruptible = true;
+    std::string source_kind;
+    bool has_session_key = false;
+    bool has_lineage_key = false;
+
+    bool is_interactive() const {
+        return priority_class == "foreground" || priority_class == "interactive";
+    }
+};
+
 enum stop_type {
     STOP_TYPE_NONE,
     STOP_TYPE_EOS,
@@ -164,6 +180,7 @@ struct server_task {
 
     // used by SERVER_TASK_TYPE_SET_LORA
     std::map<int, float> set_lora; // mapping adapter ID -> scale
+    server_task_scheduler_meta scheduler_meta;
 
     server_task() = default;
 
@@ -209,6 +226,10 @@ struct server_task {
         const int n_ctx_slot,
         const json & data);
 
+    static server_task_scheduler_meta scheduler_meta_from_request(
+        const json & data,
+        const std::map<std::string, std::string> & headers);
+
     // utility function
     static std::unordered_set<int> get_list_id(const std::vector<server_task> & tasks) {
         std::unordered_set<int> ids(tasks.size());
@@ -230,6 +251,7 @@ struct server_task {
         copy.type      = type;
         copy.tokens    = tokens.clone();
         copy.id_slot   = -1; // child tasks cannot specify slot
+        copy.scheduler_meta = scheduler_meta;
 
         // use different sampling seed for each child
         // note: https://github.com/ggml-org/llama.cpp/pull/18700#discussion_r2675115723
@@ -495,6 +517,7 @@ struct server_task_result_metrics : server_task_result {
     int n_idle_slots;
     int n_processing_slots;
     int n_tasks_deferred;
+    int n_parked_sessions = 0;
     int64_t t_start;
 
     // TODO: somehow reuse server_metrics in the future, instead of duplicating the fields
@@ -513,6 +536,10 @@ struct server_task_result_metrics : server_task_result {
 
     uint64_t n_decode_total     = 0;
     uint64_t n_busy_slots_total = 0;
+    uint64_t n_scheduler_affinity_hits = 0;
+    uint64_t n_scheduler_restore_attempts = 0;
+    uint64_t n_scheduler_restore_success = 0;
+    uint64_t n_scheduler_restore_failures = 0;
 
     // while we can also use std::vector<server_slot> this requires copying the slot object which can be quite messy
     // therefore, we use json to temporarily store the slot.to_json() result

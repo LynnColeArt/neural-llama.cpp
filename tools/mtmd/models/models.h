@@ -3,8 +3,8 @@
 #include "../clip-graph.h"
 
 /*
- * IMPORTANT: The mtmd module does NOT accept pull requests that are fully or predominantly AI-generated.
- * We encourage human contributors to ensure the quality and reliability of the codebase.
+ * Contribution policy for this fork is defined in the top-level AGENTS.md and
+ * CONTRIBUTING.md documents.
  */
 
 struct clip_graph_siglip : clip_graph {

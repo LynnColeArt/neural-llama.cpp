@@ -26,7 +26,8 @@ A team of volunteers on a reasonable-effort basis maintains this project. As suc
 Before submitting your report, ensure you meet the following requirements:
 
 - You have read this policy and fully understand it.
-- AI is only permitted in an assistive capacity as stated in [AGENTS.md](AGENTS.md). We do not accept reports that are written exclusively by AI.
+- Reports may be prepared with human or AI assistance, but they must be accurate, actionable, and owned by the reporter.
+- If you use automation to help prepare a report, make sure you can answer follow-up questions and provide any clarifications needed to validate the issue.
 - Your report must include a working Proof-of-Concept in the form of a script and/or attached files.
 
 Maintainers reserve the right to close the report if these requirements are not fulfilled.
