@@ -62,6 +62,94 @@ llama-cli -hf ggml-org/gemma-3-1b-it-GGUF
 llama-server -hf ggml-org/gemma-3-1b-it-GGUF
 ```
 
+## Fork Server Scheduling
+
+This fork carries an experimental `llama-server` lane manager for multi-agent local inference. The goal is to keep the external OpenAI-compatible API stable while letting the backend preserve session locality, restore parked requests, and route concurrent traffic across multiple lanes without exposing scheduler internals to Busy or Qwench.
+
+### How parked sessions work
+
+- Each non-child completion request may provide scheduler metadata through HTTP headers or JSON metadata fields:
+  - `X-Neural-Session-Key`
+  - `X-Neural-Lineage-Key`
+  - `X-Neural-Priority-Class`
+  - `X-Neural-Affinity-Hint`
+  - `X-Neural-Source-Kind`
+  - `X-Neural-Interruptibility`
+- When a session-tagged request finishes, the server snapshots process-local state for later reuse:
+  - prompt/token history
+  - KV cache for the slot sequence
+  - sampler state
+  - stop condition and generation counters
+  - last hot lane for the session
+- Parked sessions are ephemeral process-local engine artifacts. They are not written to disk and are not intended to survive process restart.
+
+### Lane selection order
+
+The scheduler resolves idle slots in this order:
+
+1. Exact live session match on an idle slot.
+2. Parked session restore on the session's last hot lane.
+3. Soft affinity scoring for strong locality only:
+   - shared `lineage_key`
+   - shared `affinity_hint`
+   - parked record already bound to that lane
+4. Prompt-similarity reuse.
+5. Plain least-recently-used fallback.
+
+`priority_class` and `source_kind` are treated as tie-break context, not as standalone lane-affinity signals. Shared `affinity_hint` is also pressure-aware: if a slot only matches by hint and is already holding a different parked session, the scheduler cancels that hint-only bonus and falls back toward fairer lane selection.
+
+```mermaid
+flowchart TD
+    A[POST /v1/chat/completions] --> B{Has session_key?}
+    B -- no --> G[Prompt similarity or LRU slot selection]
+    B -- yes --> C{Idle slot already owns session?}
+    C -- yes --> H[Reuse live slot identity]
+    C -- no --> D{Parked record exists?}
+    D -- yes --> E{Last hot lane idle and compatible?}
+    E -- yes --> I[Restore KV and sampler state]
+    E -- no --> F[Score strong locality]
+    D -- no --> F[Score strong locality]
+    F --> J{Affinity score > 0?}
+    J -- yes --> K[Pick best scored idle lane]
+    J -- no --> G
+    G --> L[Launch request]
+    H --> L
+    I --> L
+    K --> L
+    L --> M[Run decode]
+    M --> N[Snapshot parked session on release]
+```
+
+### What is restored
+
+Session restore targets whole-request fidelity at request boundaries. On restore, the fork reloads:
+
+- the saved prompt state
+- the per-slot KV sequence state
+- the sampler chain state
+- generation counters needed to continue the next request coherently
+
+This is intentionally narrower than arbitrary mid-stream migration. Durable parked-session persistence, cross-process restore, and token-perfect mid-stream handoff are out of scope for this fork revision.
+
+### Observability
+
+The fork exposes scheduler state through existing debug surfaces:
+
+- `GET /slots` includes per-slot session identity fields:
+  - `session_key`
+  - `lineage_key`
+  - `priority_class`
+  - `affinity_hint`
+  - `source_kind`
+- `GET /metrics` includes scheduler counters:
+  - `llamacpp:sessions_parked`
+  - `llamacpp:scheduler_affinity_hits_total`
+  - `llamacpp:scheduler_restore_attempts_total`
+  - `llamacpp:scheduler_restore_success_total`
+  - `llamacpp:scheduler_restore_failures_total`
+
+These metrics make it possible to verify that same-session requests are restoring correctly while unrelated work still spreads across available lanes.
+
 ## Description
 
 The main goal of `llama.cpp` is to enable LLM inference with minimal setup and state-of-the-art performance on a wide

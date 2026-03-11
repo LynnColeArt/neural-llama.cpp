@@ -14,8 +14,10 @@
 
 #include <cstddef>
 #include <cinttypes>
-#include <memory>
 #include <filesystem>
+#include <memory>
+#include <unordered_map>
+#include <vector>
 
 // fix problem with std::min and std::max
 #if defined(_WIN32)
@@ -162,7 +164,7 @@ struct server_slot {
     double t_prompt_processing; // ms
     double t_token_generation;  // ms
 
-    std::function<void(int /* id_slot */)> callback_on_release;
+    std::function<void(server_slot &)> callback_on_release;
 
     // Speculative decoding stats
     int32_t n_draft_total = 0;      // Total draft tokens generated
@@ -193,6 +195,7 @@ struct server_slot {
 
         task_prev = std::move(task);
         task.reset();
+        smpl.reset();
 
         llama_set_sampler(ctx, id, nullptr);
 
@@ -201,7 +204,10 @@ struct server_slot {
     }
 
     void init_sampler() const {
-        common_sampler_reset(smpl.get());
+        const bool preserve_sampler = n_decoded > 0 && task->scheduler_meta.has_session_key && smpl != nullptr;
+        if (!preserve_sampler) {
+            common_sampler_reset(smpl.get());
+        }
 
         if (!task->need_sampling()) {
             return;
@@ -209,9 +215,10 @@ struct server_slot {
 
         const int64_t t_start = ggml_time_us();
 
+        const int start_i = preserve_sampler ? n_prompt_tokens_processed : 0;
         int n_text = 0;
 
-        for (int i = 0; i < (int) prompt.tokens.size(); i++) {
+        for (int i = start_i; i < (int) prompt.tokens.size(); i++) {
             const llama_token id = prompt.tokens[i];
 
             if (id != LLAMA_TOKEN_NULL) {
@@ -220,8 +227,12 @@ struct server_slot {
             }
         }
 
+        const int total_tokens = start_i < (int) prompt.tokens.size()
+            ? (int) prompt.tokens.size() - start_i
+            : 0;
+
         SLT_INF(*this, "init sampler, took %0.2f ms, tokens: text = %d, total = %d\n",
-                (ggml_time_us() - t_start) / 1000.0, n_text, (int) prompt.tokens.size());
+                (ggml_time_us() - t_start) / 1000.0, n_text, total_tokens);
     }
 
     // if the context does not have a memory module then all embeddings have to be computed within a single ubatch
@@ -342,9 +353,11 @@ struct server_slot {
                 prompt_clear(false);
             }
 
-            reset();
+            if (callback_on_release) {
+                callback_on_release(*this);
+            }
 
-            callback_on_release(id);
+            reset();
         }
     }
 
@@ -437,6 +450,12 @@ struct server_slot {
             {"n_ctx",         n_ctx},
             {"speculative",   can_speculate()},
             {"is_processing", is_processing()},
+            {"has_session_identity", has_session_identity},
+            {"session_key",   session_key},
+            {"lineage_key",   lineage_key},
+            {"priority_class", priority_class},
+            {"affinity_hint", affinity_hint},
+            {"source_kind",   source_kind},
         };
 
         const auto & ptask = task ? task : task_prev;
@@ -483,6 +502,43 @@ struct server_slot {
 };
 
 
+
+//
+struct parked_session_record {
+    int64_t parked_at_ms = 0;
+    int32_t last_slot_id = -1;
+
+    std::string model_path;
+    std::string session_key;
+    std::string lineage_key;
+    std::string priority_class;
+    std::string affinity_hint;
+    std::string source_kind;
+    std::string stopping_word;
+
+    stop_type stop = STOP_TYPE_NONE;
+
+    int32_t n_ctx = 0;
+    int32_t n_decoded = 0;
+    int32_t n_remaining = -1;
+    int32_t i_batch = -1;
+    int32_t n_prompt_tokens_cache = 0;
+    int32_t n_prompt_tokens_processed = 0;
+    int64_t t_start_process_prompt = 0;
+    int64_t t_start_generation = 0;
+    double t_prompt_processing = 0.0;
+    double t_token_generation = 0.0;
+
+    bool has_next_token = true;
+    bool has_new_line = false;
+    bool truncated = false;
+
+    server_prompt prompt;
+    common_sampler_ptr sampler;
+    std::vector<uint8_t> kv_state;
+    std::vector<common_adapter_lora_info> lora;
+    int32_t alora_invocation_start = -1;
+};
 
 //
 // server_metrics
@@ -599,6 +655,13 @@ private:
 
     int slots_debug = 0;
 
+    static constexpr size_t parked_session_max = 128;
+    std::unordered_map<std::string, parked_session_record> parked_sessions;
+    uint64_t scheduler_affinity_hits = 0;
+    uint64_t scheduler_restore_attempts = 0;
+    uint64_t scheduler_restore_success = 0;
+    uint64_t scheduler_restore_failures = 0;
+
     std::unique_ptr<server_prompt_cache> prompt_cache;
 
     server_metrics metrics;
@@ -628,6 +691,7 @@ private:
             slot.spec = nullptr;
         }
 
+        parked_sessions.clear();
         llama_batch_free(batch);
     }
 
@@ -643,6 +707,182 @@ private:
             }
         }
         sleeping = new_state;
+    }
+
+    parked_session_record snapshot_parked_session(
+            const server_slot & slot,
+            const server_task & task) {
+        parked_session_record out;
+
+        out.parked_at_ms = ggml_time_ms();
+        out.last_slot_id = slot.id;
+        out.model_path = params_base.model.path;
+        out.session_key = task.scheduler_meta.session_key;
+        out.lineage_key = task.scheduler_meta.lineage_key;
+        out.priority_class = task.scheduler_meta.priority_class;
+        out.affinity_hint = task.scheduler_meta.affinity_hint;
+        out.source_kind = task.scheduler_meta.source_kind;
+
+        out.stop = slot.stop;
+        out.stopping_word = slot.stopping_word;
+
+        out.n_ctx = slot.n_ctx;
+        out.n_decoded = slot.n_decoded;
+        out.n_remaining = slot.n_remaining;
+        out.i_batch = slot.i_batch;
+        out.n_prompt_tokens_cache = slot.n_prompt_tokens_cache;
+        out.n_prompt_tokens_processed = slot.n_prompt_tokens_processed;
+        out.t_start_process_prompt = slot.t_start_process_prompt;
+        out.t_start_generation = slot.t_start_generation;
+        out.t_prompt_processing = slot.t_prompt_processing;
+        out.t_token_generation = slot.t_token_generation;
+        out.has_next_token = slot.has_next_token;
+        out.has_new_line = slot.has_new_line;
+        out.truncated = slot.truncated;
+
+        out.prompt = slot.prompt.clone();
+        out.lora = slot.lora;
+        out.alora_invocation_start = slot.alora_invocation_start;
+
+        if (slot.smpl != nullptr) {
+            out.sampler.reset(common_sampler_clone(slot.smpl.get()));
+        }
+
+        if (slot.prompt.n_tokens() > 0) {
+            out.kv_state.clear();
+            const size_t state_size = llama_state_seq_get_size_ext(ctx, slot.id, 0);
+            if (state_size > 0) {
+                out.kv_state.resize(state_size);
+                const size_t state_size_out = llama_state_seq_get_data_ext(
+                        ctx,
+                        out.kv_state.data(),
+                        state_size,
+                        slot.id,
+                        0);
+                if (state_size_out != state_size) {
+                    out.kv_state.resize(state_size_out);
+                }
+            }
+        }
+
+        return out;
+    }
+
+    bool is_parked_session_compatible(const parked_session_record & record, const server_slot & slot) const {
+        if (record.session_key.empty()) {
+            return false;
+        }
+        if (record.model_path != params_base.model.path) {
+            return false;
+        }
+        return record.n_ctx == slot.n_ctx;
+    }
+
+    bool restore_slot_from_record(server_slot & slot, const parked_session_record & record) {
+        if (!is_parked_session_compatible(record, slot)) {
+            SRV_WRN("parked session %s incompatible with current process: model=%s, n_ctx=%d\n",
+                record.session_key.c_str(),
+                params_base.model.path.c_str(),
+                slot.n_ctx);
+            return false;
+        }
+
+        slot.prompt = record.prompt.clone();
+
+        slot.n_decoded = record.n_decoded;
+        slot.n_remaining = record.n_remaining;
+        slot.i_batch = record.i_batch;
+        slot.t_prompt_processing = record.t_prompt_processing;
+        slot.t_token_generation = record.t_token_generation;
+        slot.n_prompt_tokens_cache = record.n_prompt_tokens_cache;
+        slot.n_prompt_tokens_processed = record.n_prompt_tokens_processed;
+        slot.t_start_process_prompt = record.t_start_process_prompt;
+        slot.t_start_generation = record.t_start_generation;
+        slot.has_next_token = record.has_next_token;
+        slot.has_new_line = record.has_new_line;
+        slot.truncated = record.truncated;
+        slot.stop = record.stop;
+        slot.stopping_word = record.stopping_word;
+        slot.lora = record.lora;
+        slot.alora_invocation_start = record.alora_invocation_start;
+        if (record.sampler != nullptr) {
+            slot.smpl.reset(common_sampler_clone(record.sampler.get()));
+        } else {
+            slot.smpl.reset();
+        }
+
+        const size_t state_size = record.kv_state.size();
+        if (state_size > 0) {
+            const size_t restored = llama_state_seq_set_data_ext(
+                    ctx,
+                    record.kv_state.data(),
+                    state_size,
+                    slot.id,
+                    0);
+            if (restored != state_size) {
+                SRV_WRN("failed to restore KV state for session %s (want=%zu, got=%zu)\n",
+                    record.session_key.c_str(),
+                    state_size,
+                    restored);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool restore_session_for_task(server_slot & slot, const server_task & task) {
+        if (!task.scheduler_meta.has_session_key) {
+            return false;
+        }
+
+        const auto it = parked_sessions.find(task.scheduler_meta.session_key);
+        if (it == parked_sessions.end()) {
+            return false;
+        }
+
+        scheduler_restore_attempts++;
+
+        if (!restore_slot_from_record(slot, it->second)) {
+            scheduler_restore_failures++;
+            parked_sessions.erase(it);
+            return false;
+        }
+
+        scheduler_restore_success++;
+        parked_sessions.erase(it);
+        return true;
+    }
+
+    void prune_parked_sessions() {
+        while (parked_sessions.size() > parked_session_max) {
+            auto it_oldest = parked_sessions.begin();
+            for (auto it = parked_sessions.begin(); it != parked_sessions.end(); ++it) {
+                if (it->second.parked_at_ms < it_oldest->second.parked_at_ms) {
+                    it_oldest = it;
+                }
+            }
+
+            SRV_WRN("evicting parked session %s\n", it_oldest->first.c_str());
+            parked_sessions.erase(it_oldest);
+        }
+    }
+
+    void on_slot_release(server_slot & slot) {
+        if (!slot.task) {
+            queue_tasks.pop_deferred_task(slot.id);
+            return;
+        }
+
+        if (!slot.task->is_child() && slot.task->scheduler_meta.has_session_key) {
+            const auto & meta = slot.task->scheduler_meta;
+            auto record = snapshot_parked_session(slot, *slot.task);
+            parked_sessions[meta.session_key] = std::move(record);
+            prune_parked_sessions();
+            slot.prompt_clear(false);
+        }
+
+        queue_tasks.pop_deferred_task(slot.id);
     }
 
     // load the model and initialize llama_context
@@ -806,8 +1046,8 @@ private:
 
             SLT_INF(slot, "new slot, n_ctx = %d\n", slot.n_ctx);
 
-            slot.callback_on_release = [this](int id_slot) {
-                queue_tasks.pop_deferred_task(id_slot);
+            slot.callback_on_release = [this](server_slot & released_slot) {
+                on_slot_release(released_slot);
             };
 
             slot.reset();
@@ -960,8 +1200,112 @@ private:
                     continue;
                 }
                 if (slot.matches_session_key(task.scheduler_meta.session_key)) {
+                    scheduler_affinity_hits++;
                     return &slot;
                 }
+            }
+        }
+
+        const parked_session_record * parked_record = nullptr;
+        if (task.scheduler_meta.has_session_key) {
+            const auto it = parked_sessions.find(task.scheduler_meta.session_key);
+            if (it != parked_sessions.end()) {
+                parked_record = &it->second;
+                if (it->second.last_slot_id >= 0) {
+                    server_slot * preferred = get_slot_by_id(it->second.last_slot_id);
+                    if (preferred != nullptr && !preferred->is_processing()) {
+                        scheduler_affinity_hits++;
+                        SLT_INF(*preferred, "selected slot by parked-session last-lane affinity, session = %s\n",
+                                task.scheduler_meta.session_key.c_str());
+                        return preferred;
+                    }
+                }
+            }
+        }
+
+        auto score_slot_affinity = [&](const server_slot & slot) -> int {
+            if (!task.scheduler_meta.has_session_key) {
+                return 0;
+            }
+
+            int score = 0;
+            bool has_strong_locality = false;
+            bool matched_last_slot = false;
+            bool matched_lineage = false;
+            bool matched_affinity_hint = false;
+
+            if (parked_record != nullptr && parked_record->last_slot_id == slot.id) {
+                score += 32;
+                has_strong_locality = true;
+                matched_last_slot = true;
+            }
+            if (!task.scheduler_meta.affinity_hint.empty() &&
+                    !slot.affinity_hint.empty() &&
+                    slot.affinity_hint == task.scheduler_meta.affinity_hint) {
+                score += 12;
+                has_strong_locality = true;
+                matched_affinity_hint = true;
+            }
+            if (task.scheduler_meta.has_lineage_key &&
+                    !slot.lineage_key.empty() &&
+                    slot.lineage_key == task.scheduler_meta.lineage_key) {
+                score += 8;
+                has_strong_locality = true;
+                matched_lineage = true;
+            }
+
+            if (!has_strong_locality) {
+                return 0;
+            }
+
+            // Treat affinity_hint as a soft routing nudge. If the only locality
+            // is a shared hint and this slot is already holding a different
+            // parked session, prefer falling back to fair slot selection.
+            if (matched_affinity_hint &&
+                    !matched_last_slot &&
+                    !matched_lineage &&
+                    slot.has_session_identity &&
+                    slot.session_key != task.scheduler_meta.session_key) {
+                score -= 16;
+            }
+
+            if (!slot.priority_class.empty() &&
+                    slot.priority_class == task.scheduler_meta.priority_class) {
+                score += 2;
+            }
+            if (!slot.source_kind.empty() &&
+                    slot.source_kind == task.scheduler_meta.source_kind) {
+                score += 1;
+            }
+
+            return score;
+        };
+
+        if (task.scheduler_meta.has_session_key) {
+            int best_score = 0;
+            int64_t best_last_used = -1;
+
+            for (server_slot & slot : slots) {
+                if (slot.is_processing()) {
+                    continue;
+                }
+
+                const int score = score_slot_affinity(slot);
+                if (score <= 0) {
+                    continue;
+                }
+
+                if (ret == nullptr || score > best_score || (score == best_score && slot.t_last_used <= best_last_used)) {
+                    ret = &slot;
+                    best_score = score;
+                    best_last_used = slot.t_last_used;
+                }
+            }
+
+            if (ret != nullptr) {
+                scheduler_affinity_hits++;
+                SLT_INF(*ret, "selected slot by scheduler affinity score = %d\n", best_score);
+                return ret;
             }
         }
 
@@ -1181,7 +1525,9 @@ private:
 
         // initialize samplers
         if (task.need_sampling()) {
-            slot.smpl.reset(common_sampler_init(model, task.params.sampling));
+            if (!slot.smpl) {
+                slot.smpl.reset(common_sampler_init(model, task.params.sampling));
+            }
 
             if (slot.smpl == nullptr) {
                 // for now, the only error that may happen here is invalid grammar
@@ -1758,6 +2104,12 @@ private:
                         break;
                     }
 
+                    const bool restored = !task.is_child() && restore_session_for_task(*slot, task);
+                    if (restored) {
+                        SRV_DBG("restored parked session state for task, id_task = %d, session = %s\n",
+                                id_task, task.scheduler_meta.session_key.c_str());
+                    }
+
                     if (task.is_parent()) {
                         // try getting free slots for all child tasks
                         size_t n_child_tasks = task.child_tasks.size();
@@ -1816,6 +2168,7 @@ private:
                     res->n_idle_slots        = n_idle_slots;
                     res->n_processing_slots  = n_processing_slots;
                     res->n_tasks_deferred    = queue_tasks.queue_tasks_deferred_size();
+                    res->n_parked_sessions   = parked_sessions.size();
                     res->t_start             = metrics.t_start;
 
                     res->n_prompt_tokens_processed_total = metrics.n_prompt_tokens_processed_total;
@@ -1832,6 +2185,10 @@ private:
 
                     res->n_decode_total          = metrics.n_decode_total;
                     res->n_busy_slots_total      = metrics.n_busy_slots_total;
+                    res->n_scheduler_affinity_hits   = scheduler_affinity_hits;
+                    res->n_scheduler_restore_attempts = scheduler_restore_attempts;
+                    res->n_scheduler_restore_success = scheduler_restore_success;
+                    res->n_scheduler_restore_failures = scheduler_restore_failures;
 
                     if (task.metrics_reset_bucket) {
                         metrics.reset_bucket();
@@ -3332,6 +3689,22 @@ void server_routes::init_routes() {
                     {"name",  "n_busy_slots_per_decode"},
                     {"help",  "Average number of busy slots per llama_decode() call"},
                     {"value",  (float) res_task->n_busy_slots_total / std::max((float) res_task->n_decode_total, 1.f)}
+            }, {
+                    {"name",  "scheduler_restore_attempts_total"},
+                    {"help",  "Total number of parked-session restore attempts."},
+                    {"value",  res_task->n_scheduler_restore_attempts}
+            }, {
+                    {"name",  "scheduler_restore_success_total"},
+                    {"help",  "Total number of successful parked-session restores."},
+                    {"value",  res_task->n_scheduler_restore_success}
+            }, {
+                    {"name",  "scheduler_restore_failures_total"},
+                    {"help",  "Total number of failed parked-session restores."},
+                    {"value",  res_task->n_scheduler_restore_failures}
+            }, {
+                    {"name",  "scheduler_affinity_hits_total"},
+                    {"help",  "Total number of slot selections that used session affinity."},
+                    {"value",  res_task->n_scheduler_affinity_hits}
             }}},
             {"gauge", {{
                     {"name",  "prompt_tokens_seconds"},
@@ -3349,6 +3722,10 @@ void server_routes::init_routes() {
                     {"name",  "requests_deferred"},
                     {"help",  "Number of requests deferred."},
                     {"value",  (uint64_t) res_task->n_tasks_deferred}
+            },{
+                    {"name",  "sessions_parked"},
+                    {"help",  "Number of parked sessions held in process-local storage."},
+                    {"value",  (uint64_t) res_task->n_parked_sessions}
             }}}
         };
 

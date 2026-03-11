@@ -1839,6 +1839,7 @@ json server_task_result_metrics::to_json() {
         { "idle",                            n_idle_slots },
         { "processing",                      n_processing_slots },
         { "deferred",                        n_tasks_deferred },
+        { "parked",                          n_parked_sessions },
         { "t_start",                         t_start },
 
         { "n_prompt_tokens_processed_total", n_prompt_tokens_processed_total },
@@ -1855,6 +1856,10 @@ json server_task_result_metrics::to_json() {
 
         { "n_decode_total",                  n_decode_total },
         { "n_busy_slots_total",              n_busy_slots_total },
+        { "n_scheduler_affinity_hits",       n_scheduler_affinity_hits },
+        { "n_scheduler_restore_attempts",    n_scheduler_restore_attempts },
+        { "n_scheduler_restore_success",     n_scheduler_restore_success },
+        { "n_scheduler_restore_failures",    n_scheduler_restore_failures },
 
         { "slots",                           slots_data },
     };
