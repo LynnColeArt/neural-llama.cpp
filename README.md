@@ -14,7 +14,7 @@
 > See [Apple Silicon NPU (CoreML)](docs/backend/COREML.md) for build and runtime notes.
 > M1 Max benchmark baselines are tracked in [M1_MAX_BENCHMARKS.md](./M1_MAX_BENCHMARKS.md).
 
-[Manifesto](https://github.com/ggml-org/llama.cpp/discussions/205) / [ggml](https://github.com/ggml-org/ggml) / [ops](https://github.com/ggml-org/llama.cpp/blob/master/docs/ops.md)
+[Manifesto](https://github.com/ggml-org/llama.cpp/discussions/205) / [ggml](https://github.com/ggml-org/ggml) / [ops](https://github.com/ggml-org/llama.cpp/blob/main/docs/ops.md)
 
 LLM inference in C/C++
 
@@ -384,7 +384,7 @@ Instructions for adding support for new models: [HOWTO-add-model.md](docs/develo
 | [OpenCL](docs/backend/OPENCL.md) | Adreno GPU |
 | [IBM zDNN](docs/backend/zDNN.md) | IBM Z & LinuxONE |
 | [WebGPU [In Progress]](docs/build.md#webgpu) | All |
-| [RPC](https://github.com/ggml-org/llama.cpp/tree/master/tools/rpc) | All |
+| [RPC](https://github.com/ggml-org/llama.cpp/tree/main/tools/rpc) | All |
 | [Hexagon [In Progress]](docs/backend/hexagon/README.md) | Snapdragon |
 | [VirtGPU](docs/backend/VirtGPU.md) | VirtGPU APIR |
 
@@ -604,7 +604,7 @@ To learn more about model quantization, [read this documentation](tools/quantize
 
 - Contributors can open PRs
 - Collaborators will be invited based on contributions
-- Maintainers can push to branches in the `llama.cpp` repo and merge PRs into the `master` branch
+- Maintainers can push to branches in the `llama.cpp` repo and merge PRs into the `main` branch
 - Any help with managing issues, PRs and projects is very appreciated!
 - See [good first issues](https://github.com/ggml-org/llama.cpp/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for tasks suitable for first contributions
 - Read the [CONTRIBUTING.md](CONTRIBUTING.md) for more information

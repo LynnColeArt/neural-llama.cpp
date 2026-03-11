@@ -113,7 +113,7 @@ USER 0
 WORKDIR /app/remoting
 
 ARG LLAMA_CPP_REPO="https://github.com/ggml-org/llama.cpp.git"
-ARG LLAMA_CPP_VERSION="master"
+ARG LLAMA_CPP_VERSION="main"
 ARG LLAMA_CPP_CMAKE_FLAGS="-DGGML_VIRTGPU=ON"
 ARG LLAMA_CPP_CMAKE_BUILD_FLAGS="--parallel 4"
 

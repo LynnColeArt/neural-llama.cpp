@@ -21,6 +21,7 @@ except ImportError as e:
 
 
 logger = logging.getLogger("compare-llama-bench")
+DEFAULT_BRANCH = "main"
 
 # All llama-bench SQL fields
 LLAMA_BENCH_DB_FIELDS = [
@@ -102,7 +103,7 @@ MODEL_SUFFIX_REPLACE = {" - Small": "_S", " - Medium": "_M", " - Large": "_L"}
 DESCRIPTION = """Creates tables from llama-bench or test-backend-ops data written to multiple JSON/CSV files, a single JSONL file or SQLite database. Example usage (Linux):
 
 For llama-bench:
-$ git checkout master
+$ git checkout main
 $ cmake -B ${BUILD_DIR} ${CMAKE_OPTS} && cmake --build ${BUILD_DIR} -t llama-bench -j $(nproc)
 $ ./llama-bench -o sql | sqlite3 llama-bench.sqlite
 $ git checkout some_branch
@@ -111,7 +112,7 @@ $ ./llama-bench -o sql | sqlite3 llama-bench.sqlite
 $ ./scripts/compare-llama-bench.py
 
 For test-backend-ops:
-$ git checkout master
+$ git checkout main
 $ cmake -B ${BUILD_DIR} ${CMAKE_OPTS} && cmake --build ${BUILD_DIR} -t test-backend-ops -j $(nproc)
 $ ./test-backend-ops perf --output sql | sqlite3 test-backend-ops.sqlite
 $ git checkout some_branch
@@ -127,13 +128,13 @@ parser = argparse.ArgumentParser(
 help_b = (
     "The baseline commit to compare performance to. "
     "Accepts either a branch name, tag name, or commit hash. "
-    "Defaults to latest master commit with data."
+    f"Defaults to latest {DEFAULT_BRANCH} commit with data."
 )
 parser.add_argument("-b", "--baseline", help=help_b)
 help_c = (
     "The commit whose performance is to be compared to the baseline. "
     "Accepts either a branch name, tag name, or commit hash. "
-    "Defaults to the non-master commit for which llama-bench was run most recently."
+    f"Defaults to the non-{DEFAULT_BRANCH} commit for which llama-bench was run most recently."
 )
 parser.add_argument("-c", "--compare", help=help_c)
 help_t = (
@@ -665,12 +666,12 @@ if known_args.baseline is not None:
     if hexsha8_baseline is None:
         logger.error(f"cannot find data for baseline={known_args.baseline}.")
         sys.exit(1)
-# Otherwise, search for the most recent parent of master for which there is data:
+# Otherwise, search for the most recent parent of the default branch for which there is data:
 elif bench_data.repo is not None:
-    hexsha8_baseline = bench_data.find_parent_in_data(bench_data.repo.heads.master.commit)
+    hexsha8_baseline = bench_data.find_parent_in_data(bench_data.repo.heads[DEFAULT_BRANCH].commit)
 
     if hexsha8_baseline is None:
-        logger.error("No baseline was provided and did not find data for any master branch commits.\n")
+        logger.error(f"No baseline was provided and did not find data for any {DEFAULT_BRANCH} branch commits.\n")
         parser.print_help()
         sys.exit(1)
 else:
@@ -695,16 +696,16 @@ if known_args.compare is not None:
         logger.error(f"cannot find data for compare={known_args.compare}.")
         sys.exit(1)
 # Otherwise, search for the commit for llama-bench was most recently run
-# and that is not a parent of master:
+# and that is not a parent of the default branch:
 elif bench_data.repo is not None:
-    hexsha8s_master = bench_data.get_all_parent_hexsha8s(bench_data.repo.heads.master.commit)
+    hexsha8s_default_branch = bench_data.get_all_parent_hexsha8s(bench_data.repo.heads[DEFAULT_BRANCH].commit)
     for (hexsha8, _) in bench_data.builds_timestamp(reverse=True):
-        if hexsha8 not in hexsha8s_master:
+        if hexsha8 not in hexsha8s_default_branch:
             hexsha8_compare = hexsha8
             break
 
     if hexsha8_compare is None:
-        logger.error("No compare target was provided and did not find data for any non-master commits.\n")
+        logger.error(f"No compare target was provided and did not find data for any non-{DEFAULT_BRANCH} commits.\n")
         parser.print_help()
         sys.exit(1)
 else:

@@ -8,7 +8,7 @@ Download [MiniCPM-V-4](https://huggingface.co/openbmb/MiniCPM-V-4) PyTorch model
 ### Build llama.cpp
 Readme modification time: 20250731
 
-If there are differences in usage, please refer to the official build [documentation](https://github.com/ggml-org/llama.cpp/blob/master/docs/build.md)
+If there are differences in usage, please refer to the official build [documentation](https://github.com/ggml-org/llama.cpp/blob/main/docs/build.md)
 
 Clone llama.cpp:
 ```bash

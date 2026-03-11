@@ -10,7 +10,7 @@ on:
         type: string
   push:
     branches:
-      - master
+      - main
     paths: ['.github/workflows/server-webui.yml', 'tools/server/webui/**.*', 'tools/server/tests/**.*', 'tools/server/public/**']
   pull_request:
     types: [opened, synchronize, reopened]
