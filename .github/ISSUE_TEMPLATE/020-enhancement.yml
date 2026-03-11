@@ -16,7 +16,7 @@ body:
       options:
         - label: I am running the latest code. Mention the version if possible as well.
           required: true
-        - label: I carefully followed the [README.md](https://github.com/ggml-org/llama.cpp/blob/master/README.md).
+        - label: I carefully followed the [README.md](https://github.com/ggml-org/llama.cpp/blob/main/README.md).
           required: true
         - label: I searched using keywords relevant to my issue to make sure that I am creating a new issue that is not already open (or closed).
           required: true

@@ -14,7 +14,7 @@ on:
         type: boolean
   push:
     branches:
-      - master
+      - main
     paths: ['.github/workflows/server.yml', '**/CMakeLists.txt', '**/Makefile', '**/*.h', '**/*.hpp', '**/*.c', '**/*.cpp', '**/*.cu', '**/*.swift', '**/*.m', 'tools/server/**.*']
   pull_request:
     types: [opened, synchronize, reopened]

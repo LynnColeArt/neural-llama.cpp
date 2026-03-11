@@ -51,7 +51,7 @@ Before submitting your PR:
 After submitting your PR:
 - Expect requests for modifications to ensure the code meets llama.cpp's standards for quality and long-term maintainability
 - Maintainers will rely on your insights and approval when making a final decision to approve and merge a PR
-- If your PR becomes stale, rebase it on top of latest `master` to get maintainers attention
+- If your PR becomes stale, rebase it on top of latest `main` to get maintainers attention
 - Consider adding yourself to [CODEOWNERS](CODEOWNERS) to indicate your availability for fixing related issues and reviewing related PRs
 
 # Pull requests (for maintainers)
@@ -175,7 +175,7 @@ Maintainers reserve the right to decline review or close pull requests for any r
 - When adding or modifying a large piece of code:
   - If you are a collaborator, make sure to add yourself to [CODEOWNERS](CODEOWNERS) to indicate your availability for reviewing related PRs
   - If you are a contributor, find an existing collaborator who is willing to review and maintain your code long-term
-  - Provide the necessary CI workflow (and hardware) to test your changes (see [ci/README.md](https://github.com/ggml-org/llama.cpp/tree/master/ci))
+  - Provide the necessary CI workflow (and hardware) to test your changes (see [ci/README.md](https://github.com/ggml-org/llama.cpp/tree/main/ci))
 
 - New code should follow the guidelines (coding, naming, etc.) outlined in this document. Exceptions are allowed in isolated, backend-specific parts of the code that do not interface directly with the `ggml` interfaces.
   _(NOTE: for legacy reasons, existing code is not required to follow this guideline)_
