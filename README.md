@@ -9,7 +9,8 @@
 > [!NOTE]
 > This is a working fork of llama.cpp that adds Apple Silicon NPU support.
 > The NPU port was authored by Lynn Cole & Samuel Goff.
-> CoreML-only hardware acceleration is used on NPU-capable Macs when built with CoreML support;
+> In the current tree, the `COREML` backend is a CoreML/NPU device-registration and routing layer
+> over Metal-backed execution;
 > Metal fallback is available only when explicitly enabled.
 > See [Apple Silicon NPU (CoreML)](docs/backend/COREML.md) for build and runtime notes.
 > M1 Max benchmark baselines are tracked in [M1_MAX_BENCHMARKS.md](./M1_MAX_BENCHMARKS.md).
