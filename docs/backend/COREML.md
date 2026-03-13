@@ -19,6 +19,16 @@ python3 scripts/apple_silicon_backend_probe.py \
   --model /path/to/model.gguf
 ```
 
+For a full artifact capture suitable for commit/review on another Apple Silicon
+machine, use the playbook and capture script in:
+
+- `docs/backend/APPLE_SILICON_VALIDATION_PLAYBOOK.md`
+- `scripts/run_apple_silicon_validation.sh`
+
+That capture now also produces a `summary.md` verdict so the first-pass read is
+the measured backend choice, the auto-vs-explicit delta, and whether explicit
+`COREML0` still routes through `MTL0` buffers.
+
 On the local M3 Max validation run that motivated this change, `MTL0` with full
 offload outperformed `COREML0` with full offload on Gemma 3 1B Q4_K.
 
