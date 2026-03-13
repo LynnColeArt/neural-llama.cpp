@@ -546,6 +546,37 @@ std::string get_string_field(
     return fallback;
 }
 
+std::string get_cookie_field(
+        const std::map<std::string, std::string> & headers,
+        const std::string & cookie_name) {
+    const std::string cookie_header = request_header_get(headers, "Cookie");
+    if (cookie_header.empty()) {
+        return {};
+    }
+
+    const std::string prefix = cookie_name + "=";
+    size_t start = 0;
+    while (start < cookie_header.size()) {
+        size_t end = cookie_header.find(';', start);
+        std::string part = cookie_header.substr(
+            start,
+            end == std::string::npos ? std::string::npos : end - start
+        );
+        while (!part.empty() && (part.front() == ' ' || part.front() == '\t')) {
+            part.erase(part.begin());
+        }
+        if (part.rfind(prefix, 0) == 0) {
+            return part.substr(prefix.size());
+        }
+        if (end == std::string::npos) {
+            break;
+        }
+        start = end + 1;
+    }
+
+    return {};
+}
+
 bool parse_interruptibility(
     const json & metadata,
     const std::map<std::string, std::string> & headers,
@@ -570,9 +601,30 @@ bool parse_interruptibility(
 }
 } // namespace
 
-server_task_scheduler_meta server_task::scheduler_meta_from_request(
+std::string server_task::continuity_token_from_request(
         const json & data,
         const std::map<std::string, std::string> & headers) {
+    const auto metadata = data.contains("metadata") && data.at("metadata").is_object()
+        ? data.at("metadata")
+        : json::object();
+
+    const std::string token = get_string_field(
+        metadata,
+        headers,
+        "X-Neural-Continuity",
+        "continuity_token"
+    );
+    if (!token.empty()) {
+        return token;
+    }
+
+    return get_cookie_field(headers, "NeuralContinuity");
+}
+
+server_task_scheduler_meta server_task::scheduler_meta_from_request(
+        const json & data,
+        const std::map<std::string, std::string> & headers,
+        const std::string & continuity_token) {
     const auto metadata = data.contains("metadata") && data.at("metadata").is_object()
         ? data.at("metadata")
         : json::object();
@@ -584,6 +636,17 @@ server_task_scheduler_meta server_task::scheduler_meta_from_request(
 
     out.lineage_key = get_string_field(metadata, headers, "X-Neural-Lineage-Key", "lineage_key");
     out.has_lineage_key = !out.lineage_key.empty();
+
+    if (!continuity_token.empty()) {
+        if (!out.has_session_key) {
+            out.session_key = continuity_token;
+            out.has_session_key = true;
+        }
+        if (!out.has_lineage_key) {
+            out.lineage_key = continuity_token;
+            out.has_lineage_key = true;
+        }
+    }
 
     out.request_class = to_lower_copy(
         get_string_field(metadata, headers, "X-Neural-Request-Class", "request_class", "default")

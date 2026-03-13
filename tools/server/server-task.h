@@ -226,9 +226,14 @@ struct server_task {
         const int n_ctx_slot,
         const json & data);
 
-    static server_task_scheduler_meta scheduler_meta_from_request(
+    static std::string continuity_token_from_request(
         const json & data,
         const std::map<std::string, std::string> & headers);
+
+    static server_task_scheduler_meta scheduler_meta_from_request(
+        const json & data,
+        const std::map<std::string, std::string> & headers,
+        const std::string & continuity_token = std::string());
 
     // utility function
     static std::unordered_set<int> get_list_id(const std::vector<server_task> & tasks) {

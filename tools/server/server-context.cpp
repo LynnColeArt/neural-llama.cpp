@@ -3391,7 +3391,22 @@ std::unique_ptr<server_res_generator> server_routes::handle_completions_impl(
 
     try {
         std::vector<server_task> tasks;
-        const auto scheduler_meta = server_task::scheduler_meta_from_request(data, req.headers);
+        auto scheduler_meta = server_task::scheduler_meta_from_request(data, req.headers);
+        if (!scheduler_meta.has_session_key) {
+            std::string continuity_token = server_task::continuity_token_from_request(data, req.headers);
+            if (continuity_token.empty()) {
+                continuity_token = "continuity-" + gen_tool_call_id();
+            }
+            scheduler_meta = server_task::scheduler_meta_from_request(data, req.headers, continuity_token);
+            if (scheduler_meta.request_class.empty() || scheduler_meta.request_class == "default") {
+                scheduler_meta.request_class = "chat";
+            }
+            if (scheduler_meta.priority_class.empty() || scheduler_meta.priority_class == "background") {
+                scheduler_meta.priority_class = "interactive";
+            }
+            res->headers["X-Neural-Continuity"] = continuity_token;
+            res->headers["Set-Cookie"] = "NeuralContinuity=" + continuity_token + "; Path=/; HttpOnly; SameSite=Lax";
+        }
 
         const auto & prompt = data.at("prompt");
         // TODO: this log can become very long, put it behind a flag or think about a more compact format
