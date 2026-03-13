@@ -1903,6 +1903,8 @@ json server_task_result_metrics::to_json() {
         { "processing",                      n_processing_slots },
         { "deferred",                        n_tasks_deferred },
         { "parked",                          n_parked_sessions },
+        { "parked_hot",                      n_hot_parked_sessions },
+        { "parked_cold",                     n_cold_parked_sessions },
         { "t_start",                         t_start },
 
         { "n_prompt_tokens_processed_total", n_prompt_tokens_processed_total },

@@ -523,6 +523,8 @@ struct server_task_result_metrics : server_task_result {
     int n_processing_slots;
     int n_tasks_deferred;
     int n_parked_sessions = 0;
+    int n_hot_parked_sessions = 0;
+    int n_cold_parked_sessions = 0;
     int64_t t_start;
 
     // TODO: somehow reuse server_metrics in the future, instead of duplicating the fields

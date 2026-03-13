@@ -164,13 +164,26 @@ struct server_slot {
     double t_prompt_processing; // ms
     double t_token_generation;  // ms
 
-    std::function<void(server_slot &)> callback_on_release;
+    std::function<bool(server_slot &)> callback_on_release;
 
     // Speculative decoding stats
     int32_t n_draft_total = 0;      // Total draft tokens generated
     int32_t n_draft_accepted = 0;   // Draft tokens actually accepted
 
-    void reset() {
+    void clear_scheduler_identity() {
+        has_session_identity = false;
+        session_key.clear();
+        lineage_key.clear();
+        priority_class.clear();
+        affinity_hint.clear();
+        source_kind.clear();
+    }
+
+    bool has_resident_session_state() const {
+        return has_session_identity && !is_processing() && prompt.n_tokens() > 0;
+    }
+
+    void reset(bool preserve_sampler = false, bool preserve_scheduler_identity = false) {
         SLT_DBG(*this, "%s", "\n");
 
         n_prompt_tokens_cache = 0;
@@ -195,12 +208,18 @@ struct server_slot {
 
         task_prev = std::move(task);
         task.reset();
-        smpl.reset();
+        if (!preserve_sampler) {
+            smpl.reset();
+        }
 
         llama_set_sampler(ctx, id, nullptr);
 
         // clear alora start
         alora_invocation_start = -1;
+
+        if (!preserve_scheduler_identity) {
+            clear_scheduler_identity();
+        }
     }
 
     void init_sampler() const {
@@ -353,11 +372,17 @@ struct server_slot {
                 prompt_clear(false);
             }
 
+            bool preserve_hot_session = false;
             if (callback_on_release) {
-                callback_on_release(*this);
+                preserve_hot_session = callback_on_release(*this);
             }
 
-            reset();
+            if (!preserve_hot_session && task->scheduler_meta.has_session_key && prompt.n_tokens() > 0) {
+                prompt_clear(false);
+            }
+
+            const bool preserve_sampler = preserve_hot_session && task->scheduler_meta.has_session_key && smpl != nullptr;
+            reset(preserve_sampler, preserve_hot_session);
         }
     }
 
@@ -709,19 +734,38 @@ private:
         sleeping = new_state;
     }
 
+    size_t count_hot_parked_sessions() const {
+        size_t count = 0;
+        for (const auto & slot : slots) {
+            if (slot.has_resident_session_state()) {
+                ++count;
+            }
+        }
+        return count;
+    }
+
     parked_session_record snapshot_parked_session(
             const server_slot & slot,
-            const server_task & task) {
+            const server_task_scheduler_meta * meta = nullptr) {
         parked_session_record out;
 
         out.parked_at_ms = ggml_time_ms();
         out.last_slot_id = slot.id;
         out.model_path = params_base.model.path;
-        out.session_key = task.scheduler_meta.session_key;
-        out.lineage_key = task.scheduler_meta.lineage_key;
-        out.priority_class = task.scheduler_meta.priority_class;
-        out.affinity_hint = task.scheduler_meta.affinity_hint;
-        out.source_kind = task.scheduler_meta.source_kind;
+
+        if (meta != nullptr) {
+            out.session_key = meta->session_key;
+            out.lineage_key = meta->lineage_key;
+            out.priority_class = meta->priority_class;
+            out.affinity_hint = meta->affinity_hint;
+            out.source_kind = meta->source_kind;
+        } else {
+            out.session_key = slot.session_key;
+            out.lineage_key = slot.lineage_key;
+            out.priority_class = slot.priority_class;
+            out.affinity_hint = slot.affinity_hint;
+            out.source_kind = slot.source_kind;
+        }
 
         out.stop = slot.stop;
         out.stopping_word = slot.stopping_word;
@@ -766,6 +810,30 @@ private:
         }
 
         return out;
+    }
+
+    bool cold_park_slot(server_slot & slot, const server_task_scheduler_meta * meta = nullptr) {
+        if (!slot.has_session_identity || slot.prompt.n_tokens() == 0) {
+            return false;
+        }
+
+        auto record = snapshot_parked_session(slot, meta);
+        if (record.session_key.empty()) {
+            return false;
+        }
+
+        const std::string session_key = record.session_key;
+        parked_sessions[session_key] = std::move(record);
+        prune_parked_sessions();
+        return true;
+    }
+
+    void clear_resident_slot(server_slot & slot) {
+        if (slot.prompt.n_tokens() > 0) {
+            slot.prompt_clear(false);
+        }
+        slot.smpl.reset();
+        slot.clear_scheduler_identity();
     }
 
     bool is_parked_session_compatible(const parked_session_record & record, const server_slot & slot) const {
@@ -868,21 +936,25 @@ private:
         }
     }
 
-    void on_slot_release(server_slot & slot) {
+    bool on_slot_release(server_slot & slot) {
         if (!slot.task) {
             queue_tasks.pop_deferred_task(slot.id);
-            return;
+            return false;
         }
 
-        if (!slot.task->is_child() && slot.task->scheduler_meta.has_session_key) {
-            const auto & meta = slot.task->scheduler_meta;
-            auto record = snapshot_parked_session(slot, *slot.task);
-            parked_sessions[meta.session_key] = std::move(record);
-            prune_parked_sessions();
-            slot.prompt_clear(false);
+        const bool keep_hot_resident = slots.size() > 1
+            && !slot.task->is_child()
+            && slot.task->scheduler_meta.has_session_key
+            && slot.prompt.n_tokens() > 0;
+
+        if (keep_hot_resident) {
+            parked_sessions.erase(slot.task->scheduler_meta.session_key);
+        } else if (!slot.task->is_child() && slot.task->scheduler_meta.has_session_key) {
+            cold_park_slot(slot, &slot.task->scheduler_meta);
         }
 
         queue_tasks.pop_deferred_task(slot.id);
+        return keep_hot_resident;
     }
 
     // load the model and initialize llama_context
@@ -1047,7 +1119,7 @@ private:
             SLT_INF(slot, "new slot, n_ctx = %d\n", slot.n_ctx);
 
             slot.callback_on_release = [this](server_slot & released_slot) {
-                on_slot_release(released_slot);
+                return on_slot_release(released_slot);
             };
 
             slot.reset();
@@ -1269,6 +1341,11 @@ private:
                 score -= 16;
             }
 
+            if (slot.has_resident_session_state() &&
+                    !slot.matches_session_key(task.scheduler_meta.session_key)) {
+                score -= 24;
+            }
+
             if (!slot.priority_class.empty() &&
                     slot.priority_class == task.scheduler_meta.priority_class) {
                 score += 2;
@@ -1311,66 +1388,68 @@ private:
 
         // find the slot that has at least n% prompt similarity
         if (ret == nullptr && slot_prompt_similarity != 0.0f) {
-            float sim_best = 0;
+            for (int pass = 0; pass < 2 && ret == nullptr; ++pass) {
+                const bool allow_hot_parked = pass == 1;
+                float sim_best = 0;
 
-            for (server_slot & slot : slots) {
-                // skip the slot if it is not available
-                if (slot.is_processing()) {
-                    continue;
+                for (server_slot & slot : slots) {
+                    if (slot.is_processing()) {
+                        continue;
+                    }
+                    if (!allow_hot_parked && slot.has_resident_session_state()) {
+                        continue;
+                    }
+
+                    const auto & tokens = slot.prompt.tokens;
+                    if (tokens.empty()) {
+                        continue;
+                    }
+
+                    const float sim_cur = float(tokens.get_common_prefix(task.tokens)) / task.tokens.size();
+                    if (sim_cur > sim_best && sim_cur > slot_prompt_similarity) {
+                        sim_best = sim_cur;
+                        ret = &slot;
+                    }
                 }
 
-                const auto & tokens = slot.prompt.tokens;
+                if (ret != nullptr) {
+                    const float f_keep = (sim_best*task.tokens.size()) / ret->prompt.tokens.size();
 
-                // skip the slot if it does not contains cached tokens
-                if (tokens.empty()) {
-                    continue;
-                }
+                    SLT_INF(*ret, "selected slot by LCP similarity, sim_best = %.3f (> %.3f thold), f_keep = %.3f\n",
+                            sim_best, slot_prompt_similarity, f_keep);
 
-                // fraction of the Longest Common Prefix length with respect to the input prompt length
-                const float sim_cur = float(tokens.get_common_prefix(task.tokens)) / task.tokens.size();
-
-                // select the current slot if the criteria match
-                if (sim_cur > sim_best && sim_cur > slot_prompt_similarity) {
-                    sim_best = sim_cur;
-
-                    ret = &slot;
-                }
-            }
-
-            if (ret != nullptr) {
-                const float f_keep = (sim_best*task.tokens.size()) / ret->prompt.tokens.size();
-
-                SLT_INF(*ret, "selected slot by LCP similarity, sim_best = %.3f (> %.3f thold), f_keep = %.3f\n",
-                        sim_best, slot_prompt_similarity, f_keep);
-
-                // if we are about to lose a large portion of the existing context - save it in the prompt cache
-                if (f_keep < 0.5f) {
-                    update_cache = true;
+                    if (f_keep < 0.5f) {
+                        update_cache = true;
+                    }
                 }
             }
         }
 
         // find the slot that has been least recently used
         if (ret == nullptr) {
-            int64_t t_last = -1;
+            for (int pass = 0; pass < 2 && ret == nullptr; ++pass) {
+                const bool allow_hot_parked = pass == 1;
+                int64_t t_last = -1;
 
-            for (server_slot & slot : slots) {
-                // skip the slot if it is not available
-                if (slot.is_processing()) {
-                    continue;
+                for (server_slot & slot : slots) {
+                    if (slot.is_processing()) {
+                        continue;
+                    }
+                    if (!allow_hot_parked && slot.has_resident_session_state()) {
+                        continue;
+                    }
+
+                    if (!ret || slot.t_last_used <= t_last) {
+                        t_last = slot.t_last_used;
+                        ret = &slot;
+                    }
                 }
 
-                // select the current slot if the criteria match
-                if (!ret || slot.t_last_used <= t_last) {
-                    t_last = slot.t_last_used;
-                    ret = &slot;
+                if (ret != nullptr) {
+                    SLT_INF(*ret, "selected slot by LRU, t_last = %" PRId64 "\n", t_last);
+
+                    update_cache = true;
                 }
-            }
-
-            if (ret != nullptr) {
-                SLT_INF(*ret, "selected slot by LRU, t_last = %" PRId64 "\n", t_last);
-
-                update_cache = true;
             }
         }
 
@@ -1384,6 +1463,11 @@ private:
 
             // don't update the cache if the slot's context is empty
             update_cache = update_cache && tokens.size() > 0;
+
+            if (ret->has_resident_session_state() &&
+                    !ret->matches_session_key(task.scheduler_meta.session_key)) {
+                update_cache = false;
+            }
 
             if (update_cache) {
                 SRV_WRN("%s", "updating prompt cache\n");
@@ -1425,7 +1509,10 @@ private:
             if (slot.prompt.n_tokens() > 0) {
                 SRV_WRN("purging slot %d with %zu tokens\n", slot.id, slot.prompt.tokens.size());
 
-                slot.prompt_clear(false);
+                if (slot.has_resident_session_state()) {
+                    cold_park_slot(slot);
+                }
+                clear_resident_slot(slot);
 
                 res = true;
 
@@ -1435,6 +1522,20 @@ private:
         }
 
         return res;
+    }
+
+    bool prepare_slot_for_task(server_slot & slot, const server_task & task) {
+        if (!slot.has_resident_session_state()) {
+            return true;
+        }
+
+        if (slot.matches_session_key(task.scheduler_meta.session_key)) {
+            return true;
+        }
+
+        cold_park_slot(slot);
+        clear_resident_slot(slot);
+        return true;
     }
 
     std::vector<common_adapter_lora_info> construct_lora_list(const std::map<int, float> & config) const {
@@ -2104,6 +2205,11 @@ private:
                         break;
                     }
 
+                    if (!prepare_slot_for_task(*slot, task)) {
+                        SRV_ERR("failed to prepare slot for task, id_task = %d\n", id_task);
+                        break;
+                    }
+
                     const bool restored = !task.is_child() && restore_session_for_task(*slot, task);
                     if (restored) {
                         SRV_DBG("restored parked session state for task, id_task = %d, session = %s\n",
@@ -2163,12 +2269,16 @@ private:
                     SRV_DBG("n_idle_slots = %d, n_processing_slots = %d\n", n_idle_slots, n_processing_slots);
 
                     auto res = std::make_unique<server_task_result_metrics>();
+                    const int n_cold_parked_sessions = parked_sessions.size();
+                    const int n_hot_parked_sessions = (int) count_hot_parked_sessions();
                     res->id                  = task.id;
                     res->slots_data          = std::move(slots_data);
                     res->n_idle_slots        = n_idle_slots;
                     res->n_processing_slots  = n_processing_slots;
                     res->n_tasks_deferred    = queue_tasks.queue_tasks_deferred_size();
-                    res->n_parked_sessions   = parked_sessions.size();
+                    res->n_cold_parked_sessions = n_cold_parked_sessions;
+                    res->n_hot_parked_sessions = n_hot_parked_sessions;
+                    res->n_parked_sessions   = n_hot_parked_sessions + n_cold_parked_sessions;
                     res->t_start             = metrics.t_start;
 
                     res->n_prompt_tokens_processed_total = metrics.n_prompt_tokens_processed_total;
@@ -3739,8 +3849,16 @@ void server_routes::init_routes() {
                     {"value",  (uint64_t) res_task->n_tasks_deferred}
             },{
                     {"name",  "sessions_parked"},
-                    {"help",  "Number of parked sessions held in process-local storage."},
+                    {"help",  "Number of hot plus cold parked sessions held by the scheduler."},
                     {"value",  (uint64_t) res_task->n_parked_sessions}
+            },{
+                    {"name",  "sessions_parked_hot"},
+                    {"help",  "Number of resident hot parked sessions kept in idle slots."},
+                    {"value",  (uint64_t) res_task->n_hot_parked_sessions}
+            },{
+                    {"name",  "sessions_parked_cold"},
+                    {"help",  "Number of cold parked sessions serialized in process-local storage."},
+                    {"value",  (uint64_t) res_task->n_cold_parked_sessions}
             }}}
         };
 
