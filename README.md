@@ -9,8 +9,9 @@
 > [!NOTE]
 > This is a working fork of llama.cpp that adds Apple Silicon NPU support.
 > The NPU port was authored by Lynn Cole & Samuel Goff.
-> CoreML-only hardware acceleration is used on NPU-capable Macs when built with CoreML support;
-> Metal fallback is available only when explicitly enabled.
+> Apple Silicon builds can expose both `COREML` and `METAL` devices.
+> The generic default in this fork now prefers `METAL`; do not assume `COREML`
+> is faster on every M-series generation.
 > See [Apple Silicon NPU (CoreML)](docs/backend/COREML.md) for build and runtime notes.
 > M1 Max benchmark baselines are tracked in [M1_MAX_BENCHMARKS.md](./M1_MAX_BENCHMARKS.md).
 
@@ -45,7 +46,7 @@ Getting started with llama.cpp is straightforward. Here are several ways to inst
 - Run with Docker - see our [Docker documentation](docs/docker.md)
 - Download pre-built binaries from the [releases page](https://github.com/ggml-org/llama.cpp/releases)
 - Build from source by cloning this repository - check out [our build guide](docs/build.md)
-- Apple Silicon NPU users should use [CoreML/NPU setup notes](docs/backend/COREML.md) and set NPU-related flags accordingly.
+- Apple Silicon users should use [CoreML/NPU setup notes](docs/backend/COREML.md) and probe `METAL` vs `COREML` on the target machine before locking a default.
 
 Once installed, you'll need a model to work with. Head to the [Obtaining and quantizing models](#obtaining-and-quantizing-models) section to learn more.
 
