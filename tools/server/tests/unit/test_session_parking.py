@@ -95,3 +95,33 @@ def test_hot_parked_session_spills_to_cold_when_displaced():
     assert get_metric(metrics.body, "sessions_parked_cold") == 2
     assert get_metric(metrics.body, "scheduler_restore_attempts_total") == 1
     assert get_metric(metrics.body, "scheduler_restore_success_total") == 1
+
+
+def test_distinct_sessions_claim_distinct_hot_slots_before_reusing_cold_state():
+    global server
+    server.n_slots = 2
+    server.start()
+
+    res = make_session_completion("session-a", "What is the capital of France?")
+    assert res.status_code == 200
+
+    res = make_session_completion("session-b", "What is the capital of Germany?")
+    assert res.status_code == 200
+
+    metrics = server.make_request("GET", "/metrics")
+    assert metrics.status_code == 200
+    assert get_metric(metrics.body, "sessions_parked_hot") == 2
+    assert get_metric(metrics.body, "sessions_parked_cold") == 0
+    assert get_metric(metrics.body, "scheduler_restore_attempts_total") == 0
+
+    res = make_session_completion("session-a", "What is the capital of Italy?")
+    assert res.status_code == 200
+
+    res = make_session_completion("session-b", "What is the capital of Spain?")
+    assert res.status_code == 200
+
+    metrics = server.make_request("GET", "/metrics")
+    assert metrics.status_code == 200
+    assert get_metric(metrics.body, "sessions_parked_hot") == 2
+    assert get_metric(metrics.body, "sessions_parked_cold") == 0
+    assert get_metric(metrics.body, "scheduler_restore_attempts_total") == 0

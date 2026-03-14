@@ -1386,6 +1386,32 @@ private:
             }
         }
 
+        if (ret == nullptr && task.scheduler_meta.has_session_key) {
+            int64_t t_last = -1;
+
+            for (server_slot & slot : slots) {
+                if (slot.is_processing()) {
+                    continue;
+                }
+                if (slot.has_resident_session_state()) {
+                    continue;
+                }
+                if (!slot.prompt.tokens.empty()) {
+                    continue;
+                }
+
+                if (!ret || slot.t_last_used <= t_last) {
+                    t_last = slot.t_last_used;
+                    ret = &slot;
+                }
+            }
+
+            if (ret != nullptr) {
+                SLT_INF(*ret, "selected empty slot for session-keyed task, t_last = %" PRId64 "\n", t_last);
+                return ret;
+            }
+        }
+
         // find the slot that has at least n% prompt similarity
         if (ret == nullptr && slot_prompt_similarity != 0.0f) {
             for (int pass = 0; pass < 2 && ret == nullptr; ++pass) {
