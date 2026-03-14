@@ -257,6 +257,9 @@ Recommended flow:
 - run the technique matrix on that base config
 - compare `median_followup_round_wall_ms` first, then latency, restore churn,
   and prompt-cache hit/admission ratios
+- use the profiler's consolidated technique summary to see whether each flag
+  has a consistent effect when enabled, and whether the measured spread is
+  small enough to justify hard-coding
 - only promote a technique combination if it wins on the metrics that matter
 
 ## What To Commit Back

@@ -45,6 +45,18 @@ TECHNIQUES = (
 )
 
 
+def normalize_case_config(case: dict) -> dict:
+    normalized = dict(case)
+    if not normalized["hot_resident_sessions"]:
+        normalized["prefer_empty_session_slots"] = False
+    return normalized
+
+
+def case_key(case: dict) -> tuple:
+    normalized = normalize_case_config(case)
+    return tuple((name, normalized[name]) for name, _ in TECHNIQUES)
+
+
 def find_free_port() -> int:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -286,6 +298,120 @@ def summarize(runs: list[dict]) -> dict:
     return summary
 
 
+def summarize_cases(payload: dict) -> dict:
+    case_items = []
+    for label, data in payload["cases"].items():
+        case_items.append({
+            "label": label,
+            "config": data["config"],
+            "summary": data["summary"],
+        })
+
+    by_key = {case_key(item["config"]): item for item in case_items}
+    technique_summary = {}
+
+    for name, _default in TECHNIQUES:
+        on_cases = [item for item in case_items if item["config"][name]]
+        off_cases = [item for item in case_items if not item["config"][name]]
+        pairs = []
+
+        for item in off_cases:
+            counterpart = dict(item["config"])
+            counterpart[name] = True
+            counterpart = normalize_case_config(counterpart)
+            other = by_key.get(case_key(counterpart))
+            if not other:
+                continue
+
+            off_ms = item["summary"]["median_followup_round_wall_ms"]
+            on_ms = other["summary"]["median_followup_round_wall_ms"]
+            delta_ms = on_ms - off_ms
+            delta_pct = (delta_ms / off_ms * 100.0) if off_ms else 0.0
+            pairs.append({
+                "off_case": item["label"],
+                "on_case": other["label"],
+                "delta_round_wall_ms": delta_ms,
+                "delta_round_wall_pct": delta_pct,
+            })
+
+        def median_metric(cases, metric):
+            return statistics.median(case["summary"][metric] for case in cases) if cases else 0.0
+
+        wins = sum(1 for pair in pairs if pair["delta_round_wall_ms"] < 0)
+        losses = sum(1 for pair in pairs if pair["delta_round_wall_ms"] > 0)
+        ties = len(pairs) - wins - losses
+        delta_pcts = [pair["delta_round_wall_pct"] for pair in pairs]
+
+        technique_summary[name] = {
+            "on_case_count": len(on_cases),
+            "off_case_count": len(off_cases),
+            "on_median_followup_round_wall_ms": median_metric(on_cases, "median_followup_round_wall_ms"),
+            "off_median_followup_round_wall_ms": median_metric(off_cases, "median_followup_round_wall_ms"),
+            "on_median_followup_latency_ms": median_metric(on_cases, "median_followup_latency_ms"),
+            "off_median_followup_latency_ms": median_metric(off_cases, "median_followup_latency_ms"),
+            "on_median_followup_prompt_ms": median_metric(on_cases, "median_followup_prompt_ms"),
+            "off_median_followup_prompt_ms": median_metric(off_cases, "median_followup_prompt_ms"),
+            "on_median_followup_predicted_per_second": median_metric(on_cases, "median_followup_predicted_per_second"),
+            "off_median_followup_predicted_per_second": median_metric(off_cases, "median_followup_predicted_per_second"),
+            "pair_count": len(pairs),
+            "pairwise_median_delta_round_wall_ms": statistics.median([pair["delta_round_wall_ms"] for pair in pairs]) if pairs else 0.0,
+            "pairwise_median_delta_round_wall_pct": statistics.median(delta_pcts) if pairs else 0.0,
+            "pairwise_min_delta_round_wall_pct": min(delta_pcts) if pairs else 0.0,
+            "pairwise_max_delta_round_wall_pct": max(delta_pcts) if pairs else 0.0,
+            "wins_when_enabled": wins,
+            "losses_when_enabled": losses,
+            "ties_when_enabled": ties,
+            "pairs": pairs,
+        }
+
+    best = payload["ranking"][0]
+    worst = payload["ranking"][-1]
+    best_ms = best["median_followup_round_wall_ms"]
+    worst_ms = worst["median_followup_round_wall_ms"]
+    spread_pct = ((worst_ms - best_ms) / best_ms * 100.0) if best_ms else 0.0
+
+    strong_consistent = []
+    inconsistent = []
+    for name, summary in technique_summary.items():
+        pair_count = summary["pair_count"]
+        if pair_count == 0:
+            continue
+        median_abs = abs(summary["pairwise_median_delta_round_wall_pct"])
+        wins = summary["wins_when_enabled"]
+        losses = summary["losses_when_enabled"]
+        dominant = max(wins, losses) / pair_count
+        if median_abs >= 3.0 and dominant >= 0.75:
+            strong_consistent.append(name)
+        elif summary["pairwise_min_delta_round_wall_pct"] < 0 < summary["pairwise_max_delta_round_wall_pct"]:
+            inconsistent.append(name)
+
+    if spread_pct < 3.0 and not strong_consistent:
+        recommendation = {
+            "mode": "hardcode",
+            "reason": "the measured spread across combinations is small and no technique shows a strong, consistent effect",
+        }
+    elif strong_consistent and not inconsistent:
+        recommendation = {
+            "mode": "targeted_toggles",
+            "reason": "a subset of techniques shows a large, consistent effect while the rest look small enough to hard-code",
+            "keep_configurable": strong_consistent,
+        }
+    else:
+        recommendation = {
+            "mode": "keep_granular",
+            "reason": "the effects vary across combinations enough that a single hard-coded policy would hide material tradeoffs",
+            "keep_configurable": sorted(set(strong_consistent + inconsistent)),
+        }
+
+    return {
+        "best_case": best,
+        "worst_case": worst,
+        "spread_round_wall_pct": spread_pct,
+        "techniques": technique_summary,
+        "granularity_recommendation": recommendation,
+    }
+
+
 def render_markdown(payload: dict) -> str:
     lines = [
         "# Technique Matrix",
@@ -319,6 +445,37 @@ def render_markdown(payload: dict) -> str:
             f"{summary.get('prompt_cache_hit_ratio', [0.0])[-1]:.3f} | "
             f"{summary.get('prompt_cache_admission_ratio', [0.0])[-1]:.3f} |"
         )
+
+    lines.extend([
+        "",
+        "## Technique Summary",
+        "",
+        "| technique | on median round ms | off median round ms | pairwise delta % | wins enabled | losses enabled |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
+    ])
+    for name, summary in payload["analysis"]["techniques"].items():
+        lines.append(
+            f"| `{name}` | "
+            f"{summary['on_median_followup_round_wall_ms']:.2f} | "
+            f"{summary['off_median_followup_round_wall_ms']:.2f} | "
+            f"{summary['pairwise_median_delta_round_wall_pct']:.2f}% | "
+            f"{summary['wins_when_enabled']} | "
+            f"{summary['losses_when_enabled']} |"
+        )
+
+    recommendation = payload["analysis"]["granularity_recommendation"]
+    lines.extend([
+        "",
+        "## Granularity",
+        "",
+        f"- best case: `{payload['analysis']['best_case']['label']}`",
+        f"- worst case: `{payload['analysis']['worst_case']['label']}`",
+        f"- round-wall spread across measured combinations: `{payload['analysis']['spread_round_wall_pct']:.2f}%`",
+        f"- recommendation: `{recommendation['mode']}`",
+        f"- reason: {recommendation['reason']}",
+    ])
+    if recommendation.get("keep_configurable"):
+        lines.append(f"- keep configurable: `{', '.join(recommendation['keep_configurable'])}`")
     return "\n".join(lines) + "\n"
 
 
@@ -327,9 +484,7 @@ def build_cases():
     defaults = {name: value for name, value in TECHNIQUES}
     cases = []
     for values in itertools.product((False, True), repeat=len(TECHNIQUES)):
-        case = dict(zip(names, values))
-        if not case["hot_resident_sessions"]:
-            case["prefer_empty_session_slots"] = False
+        case = normalize_case_config(dict(zip(names, values)))
         label = ",".join(f"{name}={'on' if case[name] else 'off'}" for name in names)
         cases.append({
             "label": label,
@@ -405,6 +560,7 @@ def main() -> int:
     payload["ranking"] = ranking
     if not ranking:
         raise SystemExit(f"no technique-matrix cases completed successfully: {payload['errors']}")
+    payload["analysis"] = summarize_cases(payload)
 
     if args.output == "json":
         print(json.dumps(payload, indent=2))
