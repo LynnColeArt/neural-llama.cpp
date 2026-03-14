@@ -1862,6 +1862,24 @@ json server_task_result_metrics::to_json() {
         { "n_scheduler_restore_attempts",    n_scheduler_restore_attempts },
         { "n_scheduler_restore_success",     n_scheduler_restore_success },
         { "n_scheduler_restore_failures",    n_scheduler_restore_failures },
+        { "n_prompt_cache_admission_attempts", n_prompt_cache_admission_attempts },
+        { "n_prompt_cache_admitted",         n_prompt_cache_admitted },
+        { "n_prompt_cache_skipped_small_prompt", n_prompt_cache_skipped_small_prompt },
+        { "n_prompt_cache_skipped_small_gain", n_prompt_cache_skipped_small_gain },
+        { "n_prompt_cache_skipped_locality_good", n_prompt_cache_skipped_locality_good },
+        { "n_prompt_cache_skipped_session_conflict", n_prompt_cache_skipped_session_conflict },
+        { "n_prompt_cache_save",             n_prompt_cache_save },
+        { "n_prompt_cache_save_bytes",       n_prompt_cache_save_bytes },
+        { "t_prompt_cache_save",             t_prompt_cache_save },
+        { "n_prompt_cache_restore_attempts", n_prompt_cache_restore_attempts },
+        { "n_prompt_cache_restore_hits",     n_prompt_cache_restore_hits },
+        { "n_prompt_cache_restore_misses",   n_prompt_cache_restore_misses },
+        { "n_prompt_cache_restore_bytes",    n_prompt_cache_restore_bytes },
+        { "t_prompt_cache_restore",          t_prompt_cache_restore },
+        { "t_prompt_cache_update",           t_prompt_cache_update },
+        { "n_prompt_cache_entries",          n_prompt_cache_entries },
+        { "n_prompt_cache_tokens",           n_prompt_cache_tokens },
+        { "n_prompt_cache_size",             n_prompt_cache_size },
 
         { "slots",                           slots_data },
     };
@@ -2010,7 +2028,20 @@ server_prompt * server_prompt_cache::alloc(const server_prompt & prompt, size_t 
     return &cur;
 }
 
-bool server_prompt_cache::load(server_prompt & prompt, const server_tokens & tokens_new, llama_context * ctx, int32_t id_slot) {
+bool server_prompt_cache::load(
+        server_prompt & prompt,
+        const server_tokens & tokens_new,
+        llama_context * ctx,
+        int32_t id_slot,
+        size_t * restored_size_out,
+        bool * restored_hit_out) {
+    if (restored_size_out != nullptr) {
+        *restored_size_out = 0;
+    }
+    if (restored_hit_out != nullptr) {
+        *restored_hit_out = false;
+    }
+
     const int lcp_best = prompt.tokens.get_common_prefix(tokens_new);
 
     float f_keep_best = float(lcp_best) / prompt.tokens.size();
@@ -2049,6 +2080,13 @@ bool server_prompt_cache::load(server_prompt & prompt, const server_tokens & tok
             SRV_WRN("failed to restore state with size %zu\n", size);
 
             return false;
+        }
+
+        if (restored_size_out != nullptr) {
+            *restored_size_out = size;
+        }
+        if (restored_hit_out != nullptr) {
+            *restored_hit_out = true;
         }
 
         it_best->data.clear();

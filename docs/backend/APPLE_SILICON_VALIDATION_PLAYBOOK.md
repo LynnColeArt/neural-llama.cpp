@@ -92,10 +92,16 @@ artifacts/apple-silicon-validation/<hostname>-<timestamp>/
   - human-readable backend matrix summary
 - `probe.json`
   - machine-readable backend matrix summary
+- `server_tuning.md`
+  - human-readable server tuning matrix covering backend policy, `n_parallel`,
+    `kv_unified`, and KV cache-type choices on a real concurrent workload
+- `server_tuning.json`
+  - machine-readable server tuning matrix
 - `summary.md`
   - distilled verdict on device exposure, best explicit backend, auto-vs-best
-    delta, whether `COREML0` still routes through `MTL0` buffers, and the
-    structured machine profile
+    delta, whether `COREML0` still routes through `MTL0` buffers, the best
+    measured server configuration, prompt-cache behavior, and the structured
+    machine profile
 - `bench_auto.json`
   - the current default (`auto`) benchmark result
 - `startup_auto.log`
@@ -120,6 +126,8 @@ It should answer, at a glance:
 - whether `auto` tracked that winning backend closely
 - whether explicit `COREML0` still ends up allocating KV/compute buffers on
   `MTL0`
+- which measured server configuration won on the concurrent chat workload
+- whether prompt-cache admission and hot-session reuse were actually helping
 
 Then use the remaining artifacts to validate or challenge that summary.
 
@@ -204,6 +212,32 @@ You want to confirm:
 
 If the benchmark says one thing and the startup logs say another, that is a
 bug or at least a documentation mismatch.
+
+### 6. Server tuning
+
+Inspect:
+
+- `server_tuning.md`
+- `server_tuning.json`
+
+This layer answers a different question than `llama-bench`:
+
+- on this machine, which server configuration actually wins on a concurrent
+  continuity-heavy workload?
+- does `n_parallel = 4` still make sense?
+- does `kv_unified` help or hurt here?
+- do alternate KV cache types improve throughput enough to justify them?
+- is prompt-cache admission earning its keep, or just creating churn?
+
+The important outputs to compare are:
+
+- `median_followup_round_wall_ms`
+- `median_followup_latency_ms`
+- `median_followup_prompt_ms`
+- `median_followup_predicted_per_second`
+- `prompt_cache_hit_ratio`
+- `prompt_cache_admission_ratio`
+- `scheduler_restore_attempts_total`
 
 ## What To Commit Back
 

@@ -22,6 +22,7 @@ This script captures:
   - git revision
   - server device list
   - backend probe results (json + markdown)
+  - server tuning results (json + markdown)
   - default auto benchmark
   - startup logs for auto, MTL0, and COREML0
   - an evidence summary that compares auto vs explicit backends
@@ -184,6 +185,22 @@ python3 "$ROOT_DIR/scripts/apple_silicon_backend_probe.py" \
   --output md \
   > "$ARTIFACT_DIR/probe.md"
 
+python3 "$ROOT_DIR/scripts/apple_silicon_server_tuner.py" \
+  --server-bin "$SERVER_BIN" \
+  --model "$MODEL_PATH" \
+  --trials 2 \
+  --rounds 2 \
+  --output json \
+  > "$ARTIFACT_DIR/server_tuning.json"
+
+python3 "$ROOT_DIR/scripts/apple_silicon_server_tuner.py" \
+  --server-bin "$SERVER_BIN" \
+  --model "$MODEL_PATH" \
+  --trials 2 \
+  --rounds 2 \
+  --output md \
+  > "$ARTIFACT_DIR/server_tuning.md"
+
 "$BENCH_BIN" \
   -m "$MODEL_PATH" \
   -p 512 \
@@ -241,6 +258,9 @@ coreml_facts = log_facts("coreml0")
 delta = auto_gen["avg_ts"] - best["gen_tps"]
 delta_pct = (delta / best["gen_tps"] * 100.0) if best["gen_tps"] else 0.0
 auto_matches_best = auto_gen["avg_ts"] >= (best["gen_tps"] * 0.97)
+server_tuning = json.loads((artifact_dir / "server_tuning.json").read_text())
+best_server = server_tuning["ranking"][0]
+best_server_summary = server_tuning["cases"][best_server["label"]]["summary"]
 summary = artifact_dir / "summary.md"
 system_fields = [
     ("model_name", "model_name"),
@@ -311,10 +331,20 @@ summary.write_text(
             f"- explicit COREML0 compute devices: {', '.join(coreml_facts['compute_devices']) or 'none'}",
             f"- explicit COREML0 routes through MTL0 buffers: {'yes' if coreml_facts['routes_coreml_through_mtl'] else 'no'}",
             "",
+            "## Server Tuning",
+            f"- best case: {best_server['label']}",
+            f"- median_followup_round_wall_ms: {best_server_summary['median_followup_round_wall_ms']:.2f}",
+            f"- median_followup_latency_ms: {best_server_summary['median_followup_latency_ms']:.2f}",
+            f"- median_followup_prompt_ms: {best_server_summary['median_followup_prompt_ms']:.2f}",
+            f"- median_followup_predicted_per_second: {best_server_summary['median_followup_predicted_per_second']:.2f}",
+            f"- prompt_cache_hit_ratio: {best_server_summary.get('prompt_cache_hit_ratio', [0.0])[-1]:.3f}",
+            f"- prompt_cache_admission_ratio: {best_server_summary.get('prompt_cache_admission_ratio', [0.0])[-1]:.3f}",
+            f"- scheduler_restore_attempts_total: {best_server_summary.get('scheduler_restore_attempts_total', [0.0])[-1]:.0f}",
+            "",
             "## Interpretation",
             f"- auto_matches_best_explicit: {'yes' if auto_matches_best else 'no'}",
             f"- coreml_full999_faster_than_metal_full999: {'yes' if results_by_name['coreml_full999']['gen_tps'] > results_by_name['metal_full999']['gen_tps'] else 'no'}",
-            "- inspect `probe.md`, `probe.json`, and the startup logs for the full evidence trail",
+            "- inspect `probe.md`, `probe.json`, `server_tuning.md`, and the startup logs for the full evidence trail",
         ]
     )
 )
