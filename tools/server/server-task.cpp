@@ -1907,6 +1907,7 @@ json server_task_result_metrics::to_json() {
         { "parked_cold",                     n_cold_parked_sessions },
         { "t_start",                         t_start },
 
+        { "n_prompt_tokens_cached_total",    n_prompt_tokens_cached_total },
         { "n_prompt_tokens_processed_total", n_prompt_tokens_processed_total },
         { "t_tokens_generation_total",       t_tokens_generation_total },
         { "n_tokens_predicted_total",        n_tokens_predicted_total },
@@ -1914,6 +1915,7 @@ json server_task_result_metrics::to_json() {
 
         { "n_tokens_max",                    n_tokens_max },
 
+        { "n_prompt_tokens_cached",          n_prompt_tokens_cached },
         { "n_prompt_tokens_processed",       n_prompt_tokens_processed },
         { "t_prompt_processing",             t_prompt_processing },
         { "n_tokens_predicted",              n_tokens_predicted },

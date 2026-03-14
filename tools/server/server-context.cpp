@@ -572,6 +572,7 @@ struct parked_session_record {
 struct server_metrics {
     int64_t t_start = 0;
 
+    uint64_t n_prompt_tokens_cached_total = 0;
     uint64_t n_prompt_tokens_processed_total = 0;
     uint64_t t_prompt_processing_total       = 0;
     uint64_t n_tokens_predicted_total        = 0;
@@ -579,6 +580,7 @@ struct server_metrics {
 
     uint64_t n_tokens_max = 0;
 
+    uint64_t n_prompt_tokens_cached = 0;
     uint64_t n_prompt_tokens_processed = 0;
     uint64_t t_prompt_processing       = 0;
 
@@ -593,6 +595,8 @@ struct server_metrics {
     }
 
     void on_prompt_eval(const server_slot & slot) {
+        n_prompt_tokens_cached_total += slot.n_prompt_tokens_cache;
+        n_prompt_tokens_cached       += slot.n_prompt_tokens_cache;
         n_prompt_tokens_processed_total += slot.n_prompt_tokens_processed;
         n_prompt_tokens_processed       += slot.n_prompt_tokens_processed;
         t_prompt_processing             += slot.t_prompt_processing;
@@ -619,6 +623,7 @@ struct server_metrics {
     }
 
     void reset_bucket() {
+        n_prompt_tokens_cached = 0;
         n_prompt_tokens_processed = 0;
         t_prompt_processing       = 0;
         n_tokens_predicted        = 0;
@@ -2336,6 +2341,7 @@ private:
                     res->n_parked_sessions   = n_hot_parked_sessions + n_cold_parked_sessions;
                     res->t_start             = metrics.t_start;
 
+                    res->n_prompt_tokens_cached_total = metrics.n_prompt_tokens_cached_total;
                     res->n_prompt_tokens_processed_total = metrics.n_prompt_tokens_processed_total;
                     res->t_prompt_processing_total       = metrics.t_prompt_processing_total;
                     res->n_tokens_predicted_total        = metrics.n_tokens_predicted_total;
@@ -2343,6 +2349,7 @@ private:
 
                     res->n_tokens_max = metrics.n_tokens_max;
 
+                    res->n_prompt_tokens_cached = metrics.n_prompt_tokens_cached;
                     res->n_prompt_tokens_processed = metrics.n_prompt_tokens_processed;
                     res->t_prompt_processing       = metrics.t_prompt_processing;
                     res->n_tokens_predicted        = metrics.n_tokens_predicted;
@@ -3849,6 +3856,10 @@ void server_routes::init_routes() {
         // metrics definition: https://prometheus.io/docs/practices/naming/#metric-names
         json all_metrics_def = json {
             {"counter", {{
+                    {"name",  "prompt_tokens_cached_total"},
+                    {"help",  "Number of prompt tokens reused from cache."},
+                    {"value",  (uint64_t) res_task->n_prompt_tokens_cached_total}
+            }, {
                     {"name",  "prompt_tokens_total"},
                     {"help",  "Number of prompt tokens processed."},
                     {"value",  (uint64_t) res_task->n_prompt_tokens_processed_total}
@@ -3922,6 +3933,13 @@ void server_routes::init_routes() {
                     {"value",  res_task->n_scheduler_affinity_hits}
             }}},
             {"gauge", {{
+                    {"name",  "prompt_cache_hit_ratio"},
+                    {"help",  "Share of prompt tokens served from cache in the current metrics bucket."},
+                    {"value",  (res_task->n_prompt_tokens_cached + res_task->n_prompt_tokens_processed)
+                            ? (double) res_task->n_prompt_tokens_cached
+                                / (double) (res_task->n_prompt_tokens_cached + res_task->n_prompt_tokens_processed)
+                            : 0.}
+            },{
                     {"name",  "prompt_tokens_seconds"},
                     {"help",  "Average prompt throughput in tokens/s."},
                     {"value",  res_task->n_prompt_tokens_processed ? 1.e3 / res_task->t_prompt_processing * res_task->n_prompt_tokens_processed : 0.}
