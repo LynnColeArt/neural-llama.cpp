@@ -116,12 +116,16 @@ struct ggml_backend_registry {
 #ifdef GGML_USE_CUDA
         register_backend(ggml_backend_cuda_reg());
 #endif
-#ifdef GGML_USE_COREML
-        register_backend(ggml_backend_coreml_reg());
-#endif
 
 #ifdef GGML_USE_METAL
+        // On Apple Silicon, keep Metal as the default offload backend. The
+        // CoreML device is still available explicitly, but its routed
+        // implementation in this fork is not guaranteed to outperform Metal
+        // across all M-series generations and model sizes.
         register_backend(ggml_backend_metal_reg());
+#endif
+#ifdef GGML_USE_COREML
+        register_backend(ggml_backend_coreml_reg());
 #endif
 #ifdef GGML_USE_SYCL
         register_backend(ggml_backend_sycl_reg());

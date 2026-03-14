@@ -575,6 +575,7 @@ def test_completion_prompt_cache():
     global server
     server.n_slots = 2
     server.kv_unified = True
+    server.server_metrics = True
     server.start()
 
     for _ in range(16):
@@ -606,3 +607,22 @@ def test_completion_prompt_cache():
         assert "prompt_n" in timings and timings["prompt_n"] + timings["cache_n"] == n_prompt
         assert "predicted_n" in timings and timings["predicted_n"] == n_predict
         assert "tokens" in res.body and isinstance(res.body["tokens"], list)
+
+    metrics = server.make_request("GET", "/metrics")
+    assert metrics.status_code == 200
+    metrics_body = metrics.body
+    assert "llamacpp:prompt_cache_admission_attempts_total" in metrics_body
+    assert "llamacpp:prompt_cache_restore_attempts_total" in metrics_body
+
+    def get_metric(name: str) -> float:
+        prefix = f"llamacpp:{name} "
+        for line in metrics_body.splitlines():
+            if line.startswith(prefix):
+                return float(line.split()[1])
+        raise AssertionError(f"metric {name} not found")
+
+    assert get_metric("prompt_cache_admission_attempts_total") >= 1
+    assert get_metric("prompt_cache_admitted_total") >= 1
+    assert get_metric("prompt_cache_save_total") >= 1
+    assert get_metric("prompt_cache_restore_attempts_total") >= 1
+    assert get_metric("prompt_cache_restore_hits_total") + get_metric("prompt_cache_restore_misses_total") == get_metric("prompt_cache_restore_attempts_total")

@@ -1,0 +1,141 @@
+{
+  "system": {
+    "platform": "macOS-26.3.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "model_name": "MacBook Pro",
+    "model_identifier": "Mac15,9",
+    "model_number": "Z1AF001AJLL/A",
+    "chip": "Apple M3 Max",
+    "cpu_cores": "16 (12 Performance and 4 Efficiency)",
+    "memory": "128 GB",
+    "system_firmware": "13822.81.10",
+    "os_loader_version": "13822.81.10",
+    "gpu_name": "Apple M3 Max",
+    "gpu_cores": "40",
+    "metal_support": "Metal 4",
+    "unified_memory": true,
+    "cpu_total_cores": 16,
+    "cpu_performance_cores": 12,
+    "cpu_efficiency_cores": 4,
+    "memory_bytes": 137438953472,
+    "memory_bytes_usable": 135455965184,
+    "cpu_physical_cores": 16,
+    "cpu_logical_cores": 16,
+    "npu_visible": true,
+    "npu_device_count": 1,
+    "npu_visible_devices": [
+      "ane0"
+    ],
+    "npu_core_count": "not_exposed_by_public_macos_apis"
+  },
+  "bench_path": "build-apple-silicon/bin/llama-bench",
+  "model": "/Users/sam/Library/Caches/llama.cpp/ggml-org_gemma-3-1b-it-GGUF_gemma-3-1b-it-Q4_K_M.gguf",
+  "prompt_tokens": 512,
+  "gen_tokens": 128,
+  "repetitions": 3,
+  "flash_attn": true,
+  "results": [
+    {
+      "name": "cpu",
+      "device": "none",
+      "n_gpu_layers": 0,
+      "prompt_tps": 906.693503,
+      "gen_tps": 118.217791,
+      "prompt_samples": [
+        987.077,
+        873.243,
+        859.76
+      ],
+      "gen_samples": [
+        119.115,
+        117.427,
+        118.111
+      ],
+      "gpu_info": "Apple M3 Max, Apple Silicon NPU (CoreML backend)",
+      "backends": "MTL,COREML,BLAS"
+    },
+    {
+      "name": "metal_partial20",
+      "device": "MTL0",
+      "n_gpu_layers": 20,
+      "prompt_tps": 2516.151817,
+      "gen_tps": 157.468385,
+      "prompt_samples": [
+        2501.08,
+        2484.81,
+        2562.57
+      ],
+      "gen_samples": [
+        174.024,
+        154.868,
+        143.514
+      ],
+      "gpu_info": "Apple M3 Max, Apple Silicon NPU (CoreML backend)",
+      "backends": "MTL,COREML,BLAS"
+    },
+    {
+      "name": "metal_full999",
+      "device": "MTL0",
+      "n_gpu_layers": 999,
+      "prompt_tps": 6436.612277,
+      "gen_tps": 215.356913,
+      "prompt_samples": [
+        6468.98,
+        6414.42,
+        6426.44
+      ],
+      "gen_samples": [
+        213.902,
+        215.73,
+        216.439
+      ],
+      "gpu_info": "Apple M3 Max, Apple Silicon NPU (CoreML backend)",
+      "backends": "MTL,COREML,BLAS"
+    },
+    {
+      "name": "coreml_partial20",
+      "device": "COREML0",
+      "n_gpu_layers": 20,
+      "prompt_tps": 2508.028288,
+      "gen_tps": 141.002992,
+      "prompt_samples": [
+        2544.53,
+        2529.33,
+        2450.23
+      ],
+      "gen_samples": [
+        162.576,
+        135.348,
+        125.085
+      ],
+      "gpu_info": "Apple M3 Max, Apple Silicon NPU (CoreML backend)",
+      "backends": "MTL,COREML,BLAS"
+    },
+    {
+      "name": "coreml_full999",
+      "device": "COREML0",
+      "n_gpu_layers": 999,
+      "prompt_tps": 6352.212341,
+      "gen_tps": 197.986357,
+      "prompt_samples": [
+        6357.48,
+        6375.31,
+        6323.85
+      ],
+      "gen_samples": [
+        196.593,
+        199.194,
+        198.172
+      ],
+      "gpu_info": "Apple M3 Max, Apple Silicon NPU (CoreML backend)",
+      "backends": "MTL,COREML,BLAS"
+    }
+  ],
+  "recommended": {
+    "name": "metal_full999",
+    "device": "MTL0",
+    "n_gpu_layers": 999,
+    "prompt_tps": 6436.612277,
+    "gen_tps": 215.356913
+  }
+}

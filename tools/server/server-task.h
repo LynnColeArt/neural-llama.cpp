@@ -518,6 +518,8 @@ struct server_task_result_metrics : server_task_result {
     int n_processing_slots;
     int n_tasks_deferred;
     int n_parked_sessions = 0;
+    int n_hot_parked_sessions = 0;
+    int n_cold_parked_sessions = 0;
     int64_t t_start;
 
     // TODO: somehow reuse server_metrics in the future, instead of duplicating the fields
@@ -540,6 +542,24 @@ struct server_task_result_metrics : server_task_result {
     uint64_t n_scheduler_restore_attempts = 0;
     uint64_t n_scheduler_restore_success = 0;
     uint64_t n_scheduler_restore_failures = 0;
+    uint64_t n_prompt_cache_admission_attempts = 0;
+    uint64_t n_prompt_cache_admitted = 0;
+    uint64_t n_prompt_cache_skipped_small_prompt = 0;
+    uint64_t n_prompt_cache_skipped_small_gain = 0;
+    uint64_t n_prompt_cache_skipped_locality_good = 0;
+    uint64_t n_prompt_cache_skipped_session_conflict = 0;
+    uint64_t n_prompt_cache_save = 0;
+    uint64_t n_prompt_cache_save_bytes = 0;
+    uint64_t t_prompt_cache_save = 0;
+    uint64_t n_prompt_cache_restore_attempts = 0;
+    uint64_t n_prompt_cache_restore_hits = 0;
+    uint64_t n_prompt_cache_restore_misses = 0;
+    uint64_t n_prompt_cache_restore_bytes = 0;
+    uint64_t t_prompt_cache_restore = 0;
+    uint64_t t_prompt_cache_update = 0;
+    uint64_t n_prompt_cache_entries = 0;
+    uint64_t n_prompt_cache_tokens = 0;
+    uint64_t n_prompt_cache_size = 0;
 
     // while we can also use std::vector<server_slot> this requires copying the slot object which can be quite messy
     // therefore, we use json to temporarily store the slot.to_json() result
@@ -643,7 +663,13 @@ struct server_prompt_cache {
 
     server_prompt * alloc(const server_prompt & prompt, size_t state_size);
 
-    bool load(server_prompt & prompt, const server_tokens & tokens_new, llama_context * ctx, int32_t id_slot);
+    bool load(
+        server_prompt & prompt,
+        const server_tokens & tokens_new,
+        llama_context * ctx,
+        int32_t id_slot,
+        size_t * restored_size_out = nullptr,
+        bool * restored_hit_out = nullptr);
 
     void update();
 };
