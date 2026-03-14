@@ -683,9 +683,16 @@ private:
     static constexpr size_t parked_session_max = 128;
     std::unordered_map<std::string, parked_session_record> parked_sessions;
     uint64_t scheduler_affinity_hits = 0;
+    uint64_t scheduler_cold_park = 0;
+    uint64_t scheduler_cold_park_kv_bytes = 0;
+    uint64_t scheduler_cold_park_us = 0;
+    uint64_t scheduler_cold_park_kv_copy_us = 0;
     uint64_t scheduler_restore_attempts = 0;
     uint64_t scheduler_restore_success = 0;
     uint64_t scheduler_restore_failures = 0;
+    uint64_t scheduler_restore_kv_bytes = 0;
+    uint64_t scheduler_restore_us = 0;
+    uint64_t scheduler_restore_kv_copy_us = 0;
 
     std::unique_ptr<server_prompt_cache> prompt_cache;
 
@@ -746,7 +753,8 @@ private:
 
     parked_session_record snapshot_parked_session(
             const server_slot & slot,
-            const server_task_scheduler_meta * meta = nullptr) {
+            const server_task_scheduler_meta * meta = nullptr,
+            uint64_t * kv_copy_us_out = nullptr) {
         parked_session_record out;
 
         out.parked_at_ms = ggml_time_ms();
@@ -797,12 +805,16 @@ private:
             const size_t state_size = llama_state_seq_get_size_ext(ctx, slot.id, 0);
             if (state_size > 0) {
                 out.kv_state.resize(state_size);
+                const int64_t t_copy_start = ggml_time_us();
                 const size_t state_size_out = llama_state_seq_get_data_ext(
                         ctx,
                         out.kv_state.data(),
                         state_size,
                         slot.id,
                         0);
+                if (kv_copy_us_out != nullptr) {
+                    *kv_copy_us_out += ggml_time_us() - t_copy_start;
+                }
                 if (state_size_out != state_size) {
                     out.kv_state.resize(state_size_out);
                 }
@@ -817,13 +829,19 @@ private:
             return false;
         }
 
-        auto record = snapshot_parked_session(slot, meta);
+        const int64_t t_snapshot_start = ggml_time_us();
+        uint64_t kv_copy_us = 0;
+        auto record = snapshot_parked_session(slot, meta, &kv_copy_us);
         if (record.session_key.empty()) {
             return false;
         }
 
         const std::string session_key = record.session_key;
         parked_sessions[session_key] = std::move(record);
+        scheduler_cold_park++;
+        scheduler_cold_park_kv_bytes += parked_sessions[session_key].kv_state.size();
+        scheduler_cold_park_us += ggml_time_us() - t_snapshot_start;
+        scheduler_cold_park_kv_copy_us += kv_copy_us;
         prune_parked_sessions();
         return true;
     }
@@ -846,7 +864,7 @@ private:
         return record.n_ctx == slot.n_ctx;
     }
 
-    bool restore_slot_from_record(server_slot & slot, const parked_session_record & record) {
+    bool restore_slot_from_record(server_slot & slot, const parked_session_record & record, uint64_t * kv_copy_us_out = nullptr) {
         if (!is_parked_session_compatible(record, slot)) {
             SRV_WRN("parked session %s incompatible with current process: model=%s, n_ctx=%d\n",
                 record.session_key.c_str(),
@@ -881,12 +899,16 @@ private:
 
         const size_t state_size = record.kv_state.size();
         if (state_size > 0) {
+            const int64_t t_copy_start = ggml_time_us();
             const size_t restored = llama_state_seq_set_data_ext(
                     ctx,
                     record.kv_state.data(),
                     state_size,
                     slot.id,
                     0);
+            if (kv_copy_us_out != nullptr) {
+                *kv_copy_us_out += ggml_time_us() - t_copy_start;
+            }
             if (restored != state_size) {
                 SRV_WRN("failed to restore KV state for session %s (want=%zu, got=%zu)\n",
                     record.session_key.c_str(),
@@ -910,14 +932,21 @@ private:
         }
 
         scheduler_restore_attempts++;
+        const int64_t t_restore_start = ggml_time_us();
+        uint64_t kv_copy_us = 0;
+        scheduler_restore_kv_bytes += it->second.kv_state.size();
 
-        if (!restore_slot_from_record(slot, it->second)) {
+        if (!restore_slot_from_record(slot, it->second, &kv_copy_us)) {
             scheduler_restore_failures++;
+            scheduler_restore_us += ggml_time_us() - t_restore_start;
+            scheduler_restore_kv_copy_us += kv_copy_us;
             parked_sessions.erase(it);
             return false;
         }
 
         scheduler_restore_success++;
+        scheduler_restore_us += ggml_time_us() - t_restore_start;
+        scheduler_restore_kv_copy_us += kv_copy_us;
         parked_sessions.erase(it);
         return true;
     }
@@ -2321,10 +2350,17 @@ private:
 
                     res->n_decode_total          = metrics.n_decode_total;
                     res->n_busy_slots_total      = metrics.n_busy_slots_total;
-                    res->n_scheduler_affinity_hits   = scheduler_affinity_hits;
+                    res->n_scheduler_affinity_hits = scheduler_affinity_hits;
+                    res->n_scheduler_cold_park = scheduler_cold_park;
+                    res->n_scheduler_cold_park_kv_bytes = scheduler_cold_park_kv_bytes;
+                    res->t_scheduler_cold_park = scheduler_cold_park_us;
+                    res->t_scheduler_cold_park_kv_copy = scheduler_cold_park_kv_copy_us;
                     res->n_scheduler_restore_attempts = scheduler_restore_attempts;
                     res->n_scheduler_restore_success = scheduler_restore_success;
                     res->n_scheduler_restore_failures = scheduler_restore_failures;
+                    res->n_scheduler_restore_kv_bytes = scheduler_restore_kv_bytes;
+                    res->t_scheduler_restore = scheduler_restore_us;
+                    res->t_scheduler_restore_kv_copy = scheduler_restore_kv_copy_us;
 
                     if (task.metrics_reset_bucket) {
                         metrics.reset_bucket();
@@ -3841,6 +3877,22 @@ void server_routes::init_routes() {
                     {"help",  "Average number of busy slots per llama_decode() call"},
                     {"value",  (float) res_task->n_busy_slots_total / std::max((float) res_task->n_decode_total, 1.f)}
             }, {
+                    {"name",  "scheduler_cold_park_total"},
+                    {"help",  "Total number of parked-session cold snapshots."},
+                    {"value",  res_task->n_scheduler_cold_park}
+            }, {
+                    {"name",  "scheduler_cold_park_kv_bytes_total"},
+                    {"help",  "Total KV bytes serialized into cold parked-session snapshots."},
+                    {"value",  res_task->n_scheduler_cold_park_kv_bytes}
+            }, {
+                    {"name",  "scheduler_cold_park_seconds_total"},
+                    {"help",  "Total wall time spent snapshotting cold parked sessions."},
+                    {"value",  (double) res_task->t_scheduler_cold_park / 1.e6}
+            }, {
+                    {"name",  "scheduler_cold_park_kv_copy_seconds_total"},
+                    {"help",  "Total time spent inside llama_state_seq_get_data_ext for cold parked sessions."},
+                    {"value",  (double) res_task->t_scheduler_cold_park_kv_copy / 1.e6}
+            }, {
                     {"name",  "scheduler_restore_attempts_total"},
                     {"help",  "Total number of parked-session restore attempts."},
                     {"value",  res_task->n_scheduler_restore_attempts}
@@ -3852,6 +3904,18 @@ void server_routes::init_routes() {
                     {"name",  "scheduler_restore_failures_total"},
                     {"help",  "Total number of failed parked-session restores."},
                     {"value",  res_task->n_scheduler_restore_failures}
+            }, {
+                    {"name",  "scheduler_restore_kv_bytes_total"},
+                    {"help",  "Total KV bytes restored from parked-session snapshots."},
+                    {"value",  res_task->n_scheduler_restore_kv_bytes}
+            }, {
+                    {"name",  "scheduler_restore_seconds_total"},
+                    {"help",  "Total wall time spent restoring parked sessions."},
+                    {"value",  (double) res_task->t_scheduler_restore / 1.e6}
+            }, {
+                    {"name",  "scheduler_restore_kv_copy_seconds_total"},
+                    {"help",  "Total time spent inside llama_state_seq_set_data_ext for parked-session restores."},
+                    {"value",  (double) res_task->t_scheduler_restore_kv_copy / 1.e6}
             }, {
                     {"name",  "scheduler_affinity_hits_total"},
                     {"help",  "Total number of slot selections that used session affinity."},

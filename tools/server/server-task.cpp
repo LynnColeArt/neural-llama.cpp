@@ -1922,9 +1922,16 @@ json server_task_result_metrics::to_json() {
         { "n_decode_total",                  n_decode_total },
         { "n_busy_slots_total",              n_busy_slots_total },
         { "n_scheduler_affinity_hits",       n_scheduler_affinity_hits },
+        { "n_scheduler_cold_park",           n_scheduler_cold_park },
+        { "n_scheduler_cold_park_kv_bytes",  n_scheduler_cold_park_kv_bytes },
+        { "t_scheduler_cold_park",           t_scheduler_cold_park },
+        { "t_scheduler_cold_park_kv_copy",   t_scheduler_cold_park_kv_copy },
         { "n_scheduler_restore_attempts",    n_scheduler_restore_attempts },
         { "n_scheduler_restore_success",     n_scheduler_restore_success },
         { "n_scheduler_restore_failures",    n_scheduler_restore_failures },
+        { "n_scheduler_restore_kv_bytes",    n_scheduler_restore_kv_bytes },
+        { "t_scheduler_restore",             t_scheduler_restore },
+        { "t_scheduler_restore_kv_copy",     t_scheduler_restore_kv_copy },
 
         { "slots",                           slots_data },
     };
