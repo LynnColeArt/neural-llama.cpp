@@ -151,6 +151,7 @@ struct server_slot {
     json json_schema;
 
     common_sampler_ptr smpl;
+    bool sampler_restored = false;
 
     llama_token  sampled; // in speculative mode, this is the last accepted token
     llama_tokens drafted;
@@ -196,6 +197,7 @@ struct server_slot {
         task_prev = std::move(task);
         task.reset();
         smpl.reset();
+        sampler_restored = false;
 
         llama_set_sampler(ctx, id, nullptr);
 
@@ -204,7 +206,7 @@ struct server_slot {
     }
 
     void init_sampler() const {
-        const bool preserve_sampler = n_decoded > 0 && task->scheduler_meta.has_session_key && smpl != nullptr;
+        const bool preserve_sampler = sampler_restored && n_decoded > 0 && task->scheduler_meta.has_session_key && smpl != nullptr;
         if (!preserve_sampler) {
             common_sampler_reset(smpl.get());
         }
@@ -805,11 +807,11 @@ private:
         slot.stopping_word = record.stopping_word;
         slot.lora = record.lora;
         slot.alora_invocation_start = record.alora_invocation_start;
-        if (record.sampler != nullptr) {
-            slot.smpl.reset(common_sampler_clone(record.sampler.get()));
-        } else {
-            slot.smpl.reset();
-        }
+        // Sampler state is request-local. We restore prompt/KV continuity, but we
+        // intentionally rebuild sampling fresh for the new request to avoid
+        // carrying stale parser / repetition / tool-call state across turns.
+        slot.smpl.reset();
+        slot.sampler_restored = false;
 
         const size_t state_size = record.kv_state.size();
         if (state_size > 0) {
