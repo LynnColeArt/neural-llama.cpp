@@ -49,6 +49,9 @@ def test_hot_parked_session_reuse_avoids_cold_restore():
     assert get_metric(metrics.body, "scheduler_restore_attempts_total") == 0
     assert get_metric(metrics.body, "prompt_tokens_cached_total") == 0
     assert get_metric(metrics.body, "prompt_cache_hit_ratio") == 0
+    assert get_metric(metrics.body, "speculative_draft_tokens_total") == 0
+    assert get_metric(metrics.body, "speculative_draft_tokens_accepted_total") == 0
+    assert get_metric(metrics.body, "speculative_acceptance_ratio") == 0
 
     res = make_session_completion("session-a", "What is the capital of Germany?")
     assert res.status_code == 200
@@ -63,6 +66,9 @@ def test_hot_parked_session_reuse_avoids_cold_restore():
     assert get_metric(metrics.body, "scheduler_restore_attempts_total") == 0
     assert get_metric(metrics.body, "prompt_tokens_cached_total") > 0
     assert get_metric(metrics.body, "prompt_cache_hit_ratio") > 0
+    assert get_metric(metrics.body, "speculative_draft_tokens_total") == 0
+    assert get_metric(metrics.body, "speculative_draft_tokens_accepted_total") == 0
+    assert get_metric(metrics.body, "speculative_acceptance_ratio") == 0
 
 
 def test_hot_parked_session_spills_to_cold_when_displaced():

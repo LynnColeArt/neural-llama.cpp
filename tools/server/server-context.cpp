@@ -574,6 +574,8 @@ struct server_metrics {
 
     uint64_t n_prompt_tokens_cached_total = 0;
     uint64_t n_prompt_tokens_processed_total = 0;
+    uint64_t n_speculative_draft_tokens_total = 0;
+    uint64_t n_speculative_draft_tokens_accepted_total = 0;
     uint64_t t_prompt_processing_total       = 0;
     uint64_t n_tokens_predicted_total        = 0;
     uint64_t t_tokens_generation_total       = 0;
@@ -582,6 +584,8 @@ struct server_metrics {
 
     uint64_t n_prompt_tokens_cached = 0;
     uint64_t n_prompt_tokens_processed = 0;
+    uint64_t n_speculative_draft_tokens = 0;
+    uint64_t n_speculative_draft_tokens_accepted = 0;
     uint64_t t_prompt_processing       = 0;
 
     uint64_t n_tokens_predicted  = 0;
@@ -606,6 +610,10 @@ struct server_metrics {
     }
 
     void on_prediction(const server_slot & slot) {
+        n_speculative_draft_tokens_total += slot.n_draft_total;
+        n_speculative_draft_tokens_accepted_total += slot.n_draft_accepted;
+        n_speculative_draft_tokens += slot.n_draft_total;
+        n_speculative_draft_tokens_accepted += slot.n_draft_accepted;
         n_tokens_predicted_total   += slot.n_decoded;
         n_tokens_predicted         += slot.n_decoded;
         t_tokens_generation        += slot.t_token_generation;
@@ -625,6 +633,8 @@ struct server_metrics {
     void reset_bucket() {
         n_prompt_tokens_cached = 0;
         n_prompt_tokens_processed = 0;
+        n_speculative_draft_tokens = 0;
+        n_speculative_draft_tokens_accepted = 0;
         t_prompt_processing       = 0;
         n_tokens_predicted        = 0;
         t_tokens_generation       = 0;
@@ -1118,10 +1128,13 @@ private:
 
         slots.clear();
 
+        const bool wants_spec =
+            params_base.speculative.has_dft() ||
+            params_base.speculative.type != COMMON_SPECULATIVE_TYPE_NONE;
         const bool can_spec =
-            params_base.speculative.type != COMMON_SPECULATIVE_TYPE_NONE &&
+            wants_spec &&
             common_speculative_is_compat(ctx);
-        if (!can_spec) {
+        if (wants_spec && !can_spec) {
             SRV_WRN("%s", "speculative decoding not supported by this context\n");
         }
 
@@ -2343,6 +2356,8 @@ private:
 
                     res->n_prompt_tokens_cached_total = metrics.n_prompt_tokens_cached_total;
                     res->n_prompt_tokens_processed_total = metrics.n_prompt_tokens_processed_total;
+                    res->n_speculative_draft_tokens_total = metrics.n_speculative_draft_tokens_total;
+                    res->n_speculative_draft_tokens_accepted_total = metrics.n_speculative_draft_tokens_accepted_total;
                     res->t_prompt_processing_total       = metrics.t_prompt_processing_total;
                     res->n_tokens_predicted_total        = metrics.n_tokens_predicted_total;
                     res->t_tokens_generation_total       = metrics.t_tokens_generation_total;
@@ -2351,6 +2366,8 @@ private:
 
                     res->n_prompt_tokens_cached = metrics.n_prompt_tokens_cached;
                     res->n_prompt_tokens_processed = metrics.n_prompt_tokens_processed;
+                    res->n_speculative_draft_tokens = metrics.n_speculative_draft_tokens;
+                    res->n_speculative_draft_tokens_accepted = metrics.n_speculative_draft_tokens_accepted;
                     res->t_prompt_processing       = metrics.t_prompt_processing;
                     res->n_tokens_predicted        = metrics.n_tokens_predicted;
                     res->t_tokens_generation       = metrics.t_tokens_generation;
@@ -3860,6 +3877,14 @@ void server_routes::init_routes() {
                     {"help",  "Number of prompt tokens reused from cache."},
                     {"value",  (uint64_t) res_task->n_prompt_tokens_cached_total}
             }, {
+                    {"name",  "speculative_draft_tokens_total"},
+                    {"help",  "Number of speculative draft tokens proposed by auxiliary decoding."},
+                    {"value",  (uint64_t) res_task->n_speculative_draft_tokens_total}
+            }, {
+                    {"name",  "speculative_draft_tokens_accepted_total"},
+                    {"help",  "Number of speculative draft tokens accepted by the target model."},
+                    {"value",  (uint64_t) res_task->n_speculative_draft_tokens_accepted_total}
+            }, {
                     {"name",  "prompt_tokens_total"},
                     {"help",  "Number of prompt tokens processed."},
                     {"value",  (uint64_t) res_task->n_prompt_tokens_processed_total}
@@ -3938,6 +3963,13 @@ void server_routes::init_routes() {
                     {"value",  (res_task->n_prompt_tokens_cached + res_task->n_prompt_tokens_processed)
                             ? (double) res_task->n_prompt_tokens_cached
                                 / (double) (res_task->n_prompt_tokens_cached + res_task->n_prompt_tokens_processed)
+                            : 0.}
+            },{
+                    {"name",  "speculative_acceptance_ratio"},
+                    {"help",  "Share of speculative draft tokens accepted in the current metrics bucket."},
+                    {"value",  res_task->n_speculative_draft_tokens
+                            ? (double) res_task->n_speculative_draft_tokens_accepted
+                                / (double) res_task->n_speculative_draft_tokens
                             : 0.}
             },{
                     {"name",  "prompt_tokens_seconds"},

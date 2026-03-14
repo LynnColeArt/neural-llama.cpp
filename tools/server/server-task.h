@@ -530,6 +530,8 @@ struct server_task_result_metrics : server_task_result {
     // TODO: somehow reuse server_metrics in the future, instead of duplicating the fields
     uint64_t n_prompt_tokens_cached_total = 0;
     uint64_t n_prompt_tokens_processed_total = 0;
+    uint64_t n_speculative_draft_tokens_total = 0;
+    uint64_t n_speculative_draft_tokens_accepted_total = 0;
     uint64_t t_prompt_processing_total       = 0;
     uint64_t n_tokens_predicted_total        = 0;
     uint64_t t_tokens_generation_total       = 0;
@@ -538,6 +540,8 @@ struct server_task_result_metrics : server_task_result {
 
     uint64_t n_prompt_tokens_cached = 0;
     uint64_t n_prompt_tokens_processed = 0;
+    uint64_t n_speculative_draft_tokens = 0;
+    uint64_t n_speculative_draft_tokens_accepted = 0;
     uint64_t t_prompt_processing       = 0;
 
     uint64_t n_tokens_predicted  = 0;
