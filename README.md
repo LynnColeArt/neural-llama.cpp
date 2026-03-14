@@ -22,6 +22,8 @@ LLM inference in C/C++
 
 - [Changelog for `libllama` API](https://github.com/ggml-org/llama.cpp/issues/9289)
 - [Changelog for `llama-server` REST API](https://github.com/ggml-org/llama.cpp/issues/9291)
+- [Fork changelog](./CHANGELOG.md) for downstream-facing changes in this
+  working fork
 
 ## Hot topics
 
