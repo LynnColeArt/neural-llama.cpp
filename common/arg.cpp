@@ -2936,6 +2936,66 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         }
     ).set_examples({LLAMA_EXAMPLE_SERVER}).set_env("LLAMA_ARG_CACHE_REUSE"));
     add_opt(common_arg(
+        {"--continuity-tokens"},
+        {"--no-continuity-tokens"},
+        string_format("whether to auto-issue and replay continuity tokens for stateless chat clients (default: %s)", params.continuity_tokens ? "enabled" : "disabled"),
+        [](common_params & params, bool value) {
+            params.continuity_tokens = value;
+        }
+    ).set_examples({LLAMA_EXAMPLE_SERVER}).set_env("LLAMA_ARG_CONTINUITY_TOKENS"));
+    add_opt(common_arg(
+        {"--hot-resident-sessions"},
+        {"--no-hot-resident-sessions"},
+        string_format("whether to keep parked sessions resident in idle slots before cold-serializing them (default: %s)", params.scheduler_hot_resident ? "enabled" : "disabled"),
+        [](common_params & params, bool value) {
+            params.scheduler_hot_resident = value;
+        }
+    ).set_examples({LLAMA_EXAMPLE_SERVER}).set_env("LLAMA_ARG_HOT_RESIDENT_SESSIONS"));
+    add_opt(common_arg(
+        {"--prefer-empty-session-slots"},
+        {"--no-prefer-empty-session-slots"},
+        string_format("whether session-keyed requests should claim an empty idle slot before evicting another resident session (default: %s)", params.scheduler_prefer_empty_slot ? "enabled" : "disabled"),
+        [](common_params & params, bool value) {
+            params.scheduler_prefer_empty_slot = value;
+        }
+    ).set_examples({LLAMA_EXAMPLE_SERVER}).set_env("LLAMA_ARG_PREFER_EMPTY_SESSION_SLOTS"));
+    add_opt(common_arg(
+        {"--prompt-cache-admission"},
+        {"--no-prompt-cache-admission"},
+        string_format("whether to gate host prompt-cache swaps behind an admission policy instead of always swapping (default: %s)", params.prompt_cache_admission ? "enabled" : "disabled"),
+        [](common_params & params, bool value) {
+            params.prompt_cache_admission = value;
+        }
+    ).set_examples({LLAMA_EXAMPLE_SERVER}).set_env("LLAMA_ARG_PROMPT_CACHE_ADMISSION"));
+    add_opt(common_arg(
+        {"--prompt-cache-min-task-tokens"}, "N",
+        string_format("minimum task token count before the prompt-cache admission policy will consider a swap (default: %d)", params.prompt_cache_min_task_tokens),
+        [](common_params & params, int value) {
+            params.prompt_cache_min_task_tokens = value;
+        }
+    ).set_examples({LLAMA_EXAMPLE_SERVER}).set_env("LLAMA_ARG_PROMPT_CACHE_MIN_TASK_TOKENS"));
+    add_opt(common_arg(
+        {"--prompt-cache-min-uncached-tokens"}, "N",
+        string_format("minimum uncached token count before the prompt-cache admission policy will consider a swap (default: %d)", params.prompt_cache_min_uncached_tokens),
+        [](common_params & params, int value) {
+            params.prompt_cache_min_uncached_tokens = value;
+        }
+    ).set_examples({LLAMA_EXAMPLE_SERVER}).set_env("LLAMA_ARG_PROMPT_CACHE_MIN_UNCACHED_TOKENS"));
+    add_opt(common_arg(
+        {"--prompt-cache-max-local-keep"}, "VALUE",
+        string_format("maximum local-keep ratio before the prompt-cache admission policy skips the swap (default: %.2f)", params.prompt_cache_max_local_keep),
+        [](common_params & params, const std::string & value) {
+            params.prompt_cache_max_local_keep = std::stof(value);
+        }
+    ).set_examples({LLAMA_EXAMPLE_SERVER}).set_env("LLAMA_ARG_PROMPT_CACHE_MAX_LOCAL_KEEP"));
+    add_opt(common_arg(
+        {"--prompt-cache-max-local-similarity"}, "VALUE",
+        string_format("maximum local-similarity ratio before the prompt-cache admission policy skips the swap (default: %.2f)", params.prompt_cache_max_local_similarity),
+        [](common_params & params, const std::string & value) {
+            params.prompt_cache_max_local_similarity = std::stof(value);
+        }
+    ).set_examples({LLAMA_EXAMPLE_SERVER}).set_env("LLAMA_ARG_PROMPT_CACHE_MAX_LOCAL_SIMILARITY"));
+    add_opt(common_arg(
         {"--metrics"},
         string_format("enable prometheus compatible metrics endpoint (default: %s)", params.endpoint_metrics ? "enabled" : "disabled"),
         [](common_params & params) {

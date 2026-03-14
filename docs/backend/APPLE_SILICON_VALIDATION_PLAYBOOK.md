@@ -97,6 +97,10 @@ artifacts/apple-silicon-validation/<hostname>-<timestamp>/
     `kv_unified`, and KV cache-type choices on a real concurrent workload
 - `server_tuning.json`
   - machine-readable server tuning matrix
+- `profile_technique_matrix.py`
+  - optional profiler for sweeping continuity, hot-resident parking, empty-slot
+    preference, and prompt-cache admission in every meaningful combination on
+    top of a fixed server configuration
 - `summary.md`
   - distilled verdict on device exposure, best explicit backend, auto-vs-best
     delta, whether `COREML0` still routes through `MTL0` buffers, the best
@@ -238,6 +242,22 @@ The important outputs to compare are:
 - `prompt_cache_hit_ratio`
 - `prompt_cache_admission_ratio`
 - `scheduler_restore_attempts_total`
+
+### 7. Technique combinations
+
+Once you know the best base server shape from `server_tuning.md`, use
+`scripts/profile_technique_matrix.py`
+to sweep the higher-level techniques in combination instead of comparing
+branches by hand.
+
+Recommended flow:
+
+- lock in one base config first: device, `parallel`, `kv_unified`, `cache_type_k`,
+  `cache_type_v`
+- run the technique matrix on that base config
+- compare `median_followup_round_wall_ms` first, then latency, restore churn,
+  and prompt-cache hit/admission ratios
+- only promote a technique combination if it wins on the metrics that matter
 
 ## What To Commit Back
 

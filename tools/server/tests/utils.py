@@ -81,6 +81,10 @@ class ServerProcess:
     server_reranking: bool | None = False
     server_metrics: bool | None = False
     kv_unified: bool | None = False
+    continuity_tokens: bool | None = None
+    hot_resident_sessions: bool | None = None
+    prefer_empty_session_slots: bool | None = None
+    prompt_cache_admission: bool | None = None
     server_slots: bool | None = False
     pooling: str | None = None
     draft: int | None = None
@@ -173,6 +177,14 @@ class ServerProcess:
             server_args.append("--metrics")
         if self.kv_unified:
             server_args.append("--kv-unified")
+        if self.continuity_tokens is not None:
+            server_args.append("--continuity-tokens" if self.continuity_tokens else "--no-continuity-tokens")
+        if self.hot_resident_sessions is not None:
+            server_args.append("--hot-resident-sessions" if self.hot_resident_sessions else "--no-hot-resident-sessions")
+        if self.prefer_empty_session_slots is not None:
+            server_args.append("--prefer-empty-session-slots" if self.prefer_empty_session_slots else "--no-prefer-empty-session-slots")
+        if self.prompt_cache_admission is not None:
+            server_args.append("--prompt-cache-admission" if self.prompt_cache_admission else "--no-prompt-cache-admission")
         if self.server_slots:
             server_args.append("--slots")
         else:

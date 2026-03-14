@@ -626,3 +626,49 @@ def test_completion_prompt_cache():
     assert get_metric("prompt_cache_save_total") >= 1
     assert get_metric("prompt_cache_restore_attempts_total") >= 1
     assert get_metric("prompt_cache_restore_hits_total") + get_metric("prompt_cache_restore_misses_total") == get_metric("prompt_cache_restore_attempts_total")
+
+
+def test_completion_prompt_cache_without_admission_policy():
+    global server
+    server.n_slots = 2
+    server.kv_unified = True
+    server.server_metrics = True
+    server.prompt_cache_admission = False
+    server.start()
+
+    for _ in range(8):
+        res = server.make_request(
+            "POST",
+            "/completion",
+            data={
+                "prompt": (" Hello 0") * 44,
+                "n_predict": 4,
+            },
+        )
+        assert res.status_code == 200
+
+        res = server.make_request(
+            "POST",
+            "/completion",
+            data={
+                "prompt": (" Hello 1") * 45,
+                "n_predict": 4,
+            },
+        )
+        assert res.status_code == 200
+
+    metrics = server.make_request("GET", "/metrics")
+    assert metrics.status_code == 200
+    metrics_body = metrics.body
+
+    def get_metric(name: str) -> float:
+        prefix = f"llamacpp:{name} "
+        for line in metrics_body.splitlines():
+            if line.startswith(prefix):
+                return float(line.split()[1])
+        raise AssertionError(f"metric {name} not found")
+
+    assert get_metric("prompt_cache_admission_attempts_total") == 0
+    assert get_metric("prompt_cache_admitted_total") == 0
+    assert get_metric("prompt_cache_save_total") >= 1
+    assert get_metric("prompt_cache_restore_attempts_total") >= 1

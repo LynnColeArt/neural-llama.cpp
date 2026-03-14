@@ -524,6 +524,14 @@ struct common_params {
     bool    cache_prompt      = true;         // whether to enable prompt caching
     int32_t n_ctx_checkpoints = 8;            // max number of context checkpoints per slot
     int32_t cache_ram_mib     = 8192;         // -1 = no limit, 0 - disable, 1 = 1 MiB, etc.
+    bool    continuity_tokens = false;        // auto-issue and replay continuity tokens for chat-style clients
+    bool    scheduler_hot_resident = true;    // keep parked session state resident in idle slots when possible
+    bool    scheduler_prefer_empty_slot = true; // prefer an empty idle slot before evicting another resident session
+    bool    prompt_cache_admission = true;    // gate host prompt-cache swaps behind an admission policy
+    int32_t prompt_cache_min_task_tokens = 192;
+    int32_t prompt_cache_min_uncached_tokens = 64;
+    float   prompt_cache_max_local_keep = 0.90f;
+    float   prompt_cache_max_local_similarity = 0.90f;
 
     std::string hostname      = "127.0.0.1";
     std::string public_path   = "";                                                                         // NOLINT

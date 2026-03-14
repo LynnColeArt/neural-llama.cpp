@@ -31,10 +31,6 @@
 using json = nlohmann::ordered_json;
 
 constexpr int HTTP_POLLING_SECONDS = 1;
-constexpr int PROMPT_CACHE_MIN_TASK_TOKENS = 192;
-constexpr int PROMPT_CACHE_MIN_UNCACHED_TOKENS = 64;
-constexpr float PROMPT_CACHE_MAX_LOCAL_KEEP = 0.90f;
-constexpr float PROMPT_CACHE_MAX_LOCAL_SIMILARITY = 0.90f;
 
 struct prompt_cache_admission {
     bool allowed = false;
@@ -975,7 +971,8 @@ private:
             return false;
         }
 
-        const bool keep_hot_resident = slots.size() > 1
+        const bool keep_hot_resident = params_base.scheduler_hot_resident
+            && slots.size() > 1
             && !slot.task->is_child()
             && slot.task->scheduler_meta.has_session_key
             && slot.prompt.n_tokens() > 0;
@@ -1330,18 +1327,18 @@ private:
         admission.local_similarity = float(admission.common_prefix) / task.tokens.size();
         admission.uncached_tokens = static_cast<int>(task.tokens.size() - admission.common_prefix);
 
-        if (task.tokens.size() < PROMPT_CACHE_MIN_TASK_TOKENS) {
+        if (task.tokens.size() < (size_t) params_base.prompt_cache_min_task_tokens) {
             admission.reason = "small_prompt";
             return admission;
         }
 
-        if (admission.uncached_tokens < PROMPT_CACHE_MIN_UNCACHED_TOKENS) {
+        if (admission.uncached_tokens < params_base.prompt_cache_min_uncached_tokens) {
             admission.reason = "small_gain";
             return admission;
         }
 
-        if (admission.local_keep >= PROMPT_CACHE_MAX_LOCAL_KEEP &&
-                admission.local_similarity >= PROMPT_CACHE_MAX_LOCAL_SIMILARITY) {
+        if (admission.local_keep >= params_base.prompt_cache_max_local_keep &&
+                admission.local_similarity >= params_base.prompt_cache_max_local_similarity) {
             admission.reason = "locality_good";
             return admission;
         }
@@ -1476,6 +1473,34 @@ private:
             }
         }
 
+        if (ret == nullptr &&
+                params_base.scheduler_prefer_empty_slot &&
+                task.scheduler_meta.has_session_key) {
+            int64_t t_last = -1;
+
+            for (server_slot & slot : slots) {
+                if (slot.is_processing()) {
+                    continue;
+                }
+                if (slot.has_resident_session_state()) {
+                    continue;
+                }
+                if (!slot.prompt.tokens.empty()) {
+                    continue;
+                }
+
+                if (!ret || slot.t_last_used <= t_last) {
+                    t_last = slot.t_last_used;
+                    ret = &slot;
+                }
+            }
+
+            if (ret != nullptr) {
+                SLT_INF(*ret, "selected empty slot for session-keyed task, t_last = %" PRId64 "\n", t_last);
+                return ret;
+            }
+        }
+
         // find the slot that has at least n% prompt similarity
         if (ret == nullptr && slot_prompt_similarity != 0.0f) {
             for (int pass = 0; pass < 2 && ret == nullptr; ++pass) {
@@ -1544,19 +1569,30 @@ private:
         }
 
         if (ret) {
-            const auto admission = evaluate_prompt_cache_admission(*ret, task);
+            prompt_cache_admission admission;
             const bool prompt_cache_candidate = update_cache;
-            update_cache = update_cache && admission.allowed;
+            if (params_base.prompt_cache_admission) {
+                admission = evaluate_prompt_cache_admission(*ret, task);
+                update_cache = update_cache && admission.allowed;
+            } else {
+                update_cache = update_cache && prompt_cache != nullptr;
+            }
 
             if (prompt_cache_candidate && update_cache) {
-                prompt_cache_admission_attempts++;
-                prompt_cache_admitted++;
+                if (params_base.prompt_cache_admission) {
+                    prompt_cache_admission_attempts++;
+                    prompt_cache_admitted++;
+                }
 
-                SRV_WRN(
-                    "updating prompt cache (local_keep = %.3f, local_similarity = %.3f, uncached_tokens = %d)\n",
-                    admission.local_keep,
-                    admission.local_similarity,
-                    admission.uncached_tokens);
+                if (params_base.prompt_cache_admission) {
+                    SRV_WRN(
+                        "updating prompt cache (local_keep = %.3f, local_similarity = %.3f, uncached_tokens = %d)\n",
+                        admission.local_keep,
+                        admission.local_similarity,
+                        admission.uncached_tokens);
+                } else {
+                    SRV_WRN("%s", "updating prompt cache without admission policy\n");
+                }
 
                 const int64_t t_start = ggml_time_us();
 
@@ -1588,7 +1624,7 @@ private:
                 prompt_cache_update_us += ggml_time_us() - t_update_start;
 
                 SRV_WRN("prompt cache update took %.2f ms\n", (ggml_time_us() - t_start) / 1000.0);
-            } else if (prompt_cache_candidate) {
+            } else if (prompt_cache_candidate && params_base.prompt_cache_admission) {
                 prompt_cache_admission_attempts++;
                 if (admission.reason == std::string("small_prompt")) {
                     prompt_cache_skipped_small_prompt++;
@@ -3635,7 +3671,22 @@ std::unique_ptr<server_res_generator> server_routes::handle_completions_impl(
 
     try {
         std::vector<server_task> tasks;
-        const auto scheduler_meta = server_task::scheduler_meta_from_request(data, req.headers);
+        auto scheduler_meta = server_task::scheduler_meta_from_request(data, req.headers);
+        if (params.continuity_tokens && !scheduler_meta.has_session_key) {
+            std::string continuity_token = server_task::continuity_token_from_request(data, req.headers);
+            if (continuity_token.empty()) {
+                continuity_token = "continuity-" + gen_tool_call_id();
+            }
+            scheduler_meta = server_task::scheduler_meta_from_request(data, req.headers, continuity_token);
+            if (scheduler_meta.request_class.empty() || scheduler_meta.request_class == "default") {
+                scheduler_meta.request_class = "chat";
+            }
+            if (scheduler_meta.priority_class.empty() || scheduler_meta.priority_class == "background") {
+                scheduler_meta.priority_class = "interactive";
+            }
+            res->headers["X-Neural-Continuity"] = continuity_token;
+            res->headers["Set-Cookie"] = "NeuralContinuity=" + continuity_token + "; Path=/; HttpOnly; SameSite=Lax";
+        }
 
         const auto & prompt = data.at("prompt");
         // TODO: this log can become very long, put it behind a flag or think about a more compact format
