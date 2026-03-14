@@ -1,9 +1,24 @@
-# M1 Max NPU Benchmarks
+# Apple Silicon Benchmark Notes
 
 ## Scope
 
-These are local baseline performance results for the `neural-llama.cpp` fork on Apple Silicon M1 Max using
-`qwen3.5-0.8B-Q4_K_M.gguf` with CoreML/ANE execution.
+This document now carries two related but distinct Apple Silicon performance
+artifacts:
+
+1. the original M1 Max `llama-server` baseline on `qwen3.5-0.8B-Q4_K_M.gguf`
+2. the newer M3 Max backend-selection validation bundle on
+   `gemma-3-1b-it-Q4_K_M.gguf`
+
+They are both useful, but they are not apples-to-apples. The model, workload,
+and context regime differ, so cross-machine comparisons should focus on backend
+behavior and default-policy correctness unless the same model and prompt path
+are rerun on both systems.
+
+## M1 Max Baseline
+
+These are local baseline performance results for the `neural-llama.cpp` fork
+on Apple Silicon M1 Max using `qwen3.5-0.8B-Q4_K_M.gguf` with CoreML/ANE
+execution.
 
 - Fork commit: `0ee8108abb`
 - Model path: `models/qwen3.5-0.8b.Q4_K_M.gguf`
@@ -69,3 +84,66 @@ Notes:
 - Current M1 Max runs with CoreML/ANE are in a practical 73–76 TPS range on this model for text completion under high context.
 - TTFT is sub-100 ms for text and about 1.0 s for image-conditioned prompts in the measured sample.
 - For apples-to-apples reruns, keep `-c 262144`, `--n-gpu-layers 999`, `--main-gpu 0`, and `--device COREML0` constant.
+
+## M3 Max Backend Validation
+
+The updated Apple Silicon validation harness was run on an Apple M3 Max and the
+full evidence bundle is committed at:
+
+- `artifacts/apple-silicon-validation/samuels-macbook-pro-2-20260313-193027/`
+
+The quick-read verdict is in:
+
+- `artifacts/apple-silicon-validation/samuels-macbook-pro-2-20260313-193027/summary.md`
+
+The underlying probe matrix is in:
+
+- `artifacts/apple-silicon-validation/samuels-macbook-pro-2-20260313-193027/probe.md`
+- `artifacts/apple-silicon-validation/samuels-macbook-pro-2-20260313-193027/probe.json`
+
+### Validation setup
+
+- Machine: Apple M3 Max
+- Model: `gemma-3-1b-it-Q4_K_M.gguf`
+- Tool: `scripts/run_apple_silicon_validation.sh`
+- Prompt tokens: `512`
+- Generation tokens: `128`
+- Repetitions: `3` for the explicit backend probe, `1` for the `auto` check
+- Flash attention: enabled
+
+### M3 Max probe results
+
+| Config           | Device  | NGL | Prompt TPS | Gen TPS |
+|------------------|---------|-----|------------|---------|
+| cpu              | none    | 0   | 935.49     | 112.19  |
+| metal_partial20  | MTL0    | 20  | 2469.11    | 126.73  |
+| metal_full999    | MTL0    | 999 | 6438.81    | 216.27  |
+| coreml_partial20 | COREML0 | 20  | 2251.35    | 135.92  |
+| coreml_full999   | COREML0 | 999 | 6357.99    | 192.92  |
+
+`auto` on the same build/model landed at:
+
+- prompt TPS: `6419.27`
+- gen TPS: `219.99`
+- delta vs best explicit gen TPS: `-1.95%`
+
+### M3 Max interpretation
+
+- On this M3 Max, the best explicit backend is `MTL0 --n-gpu-layers 999`.
+- `MTL0` full offload beat `COREML0` full offload by about `15.29%`.
+- `metal_full999` beat `metal_partial20` by about `64.02%`.
+- `coreml_full999` beat `coreml_partial20` by about `58.66%`.
+- `auto` now tracks the fastest explicit path closely enough to count as
+  correct on this machine.
+- Startup logs show that explicit `COREML0` still allocates KV and compute
+  buffers on `MTL0`, so the current `COREML0` path is still Metal-routed in
+  practice on this branch.
+
+## Current Takeaway
+
+- The older M1 Max baseline proves that `COREML0 --n-gpu-layers 999` was a
+  practical high-performance path on that machine/model/workload.
+- The newer M3 Max validation proves that a generic Apple Silicon
+  `COREML`-first policy does not hold across hardware generations.
+- The right cross-machine strategy in this fork is to validate backend choice
+  with evidence, not assume one backend label is universally best.

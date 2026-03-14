@@ -13,7 +13,8 @@
 > The generic default in this fork now prefers `METAL`; do not assume `COREML`
 > is faster on every M-series generation.
 > See [Apple Silicon NPU (CoreML)](docs/backend/COREML.md) for build and runtime notes.
-> M1 Max benchmark baselines are tracked in [M1_MAX_BENCHMARKS.md](./M1_MAX_BENCHMARKS.md).
+> Apple Silicon benchmark notes, including the original M1 Max baseline and a
+> checked-in M3 Max validation bundle, are tracked in [M1_MAX_BENCHMARKS.md](./M1_MAX_BENCHMARKS.md).
 
 [Manifesto](https://github.com/ggml-org/llama.cpp/discussions/205) / [ggml](https://github.com/ggml-org/ggml) / [ops](https://github.com/ggml-org/llama.cpp/blob/main/docs/ops.md)
 
