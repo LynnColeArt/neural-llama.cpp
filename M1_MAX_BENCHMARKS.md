@@ -96,6 +96,10 @@ The quick-read verdict is in:
 
 - `artifacts/apple-silicon-validation/samuels-macbook-pro-2-20260313-193027/summary.md`
 
+That summary now includes the structured machine profile for the validation
+host: model identifier, CPU split, GPU cores, ANE visibility/device count,
+memory bytes, unified-memory flag, Metal family, and firmware/loader versions.
+
 The underlying probe matrix is in:
 
 - `artifacts/apple-silicon-validation/samuels-macbook-pro-2-20260313-193027/probe.md`

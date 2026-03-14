@@ -81,7 +81,7 @@ artifacts/apple-silicon-validation/<hostname>-<timestamp>/
 ## What The Capture Produces
 
 - `system_profile.txt`
-  - machine, chip, CPU core split, GPU core count, memory, Metal family
+  - sanitized raw hardware/display profile from macOS
 - `sw_vers.txt`
   - macOS version context
 - `git_rev.txt`
@@ -94,7 +94,8 @@ artifacts/apple-silicon-validation/<hostname>-<timestamp>/
   - machine-readable backend matrix summary
 - `summary.md`
   - distilled verdict on device exposure, best explicit backend, auto-vs-best
-    delta, and whether `COREML0` still routes through `MTL0` buffers
+    delta, whether `COREML0` still routes through `MTL0` buffers, and the
+    structured machine profile
 - `bench_auto.json`
   - the current default (`auto`) benchmark result
 - `startup_auto.log`
@@ -113,12 +114,21 @@ Open `summary.md` before digging through the raw artifacts.
 It should answer, at a glance:
 
 - what machine was tested
+- the full machine profile: model identifier, CPU split, GPU, ANE visibility,
+  unified memory, memory size, firmware
 - which explicit backend won
 - whether `auto` tracked that winning backend closely
 - whether explicit `COREML0` still ends up allocating KV/compute buffers on
   `MTL0`
 
 Then use the remaining artifacts to validate or challenge that summary.
+
+Note:
+
+- macOS does not expose a stable public ANE core-count field in the same clean
+  way it exposes CPU and GPU cores. The capture records ANE visibility and
+  visible ANE devices, and marks NPU core count as not publicly exposed when
+  that remains true.
 
 ### 1. Device exposure
 

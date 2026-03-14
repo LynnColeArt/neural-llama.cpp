@@ -143,7 +143,30 @@ PY
   echo "auto_bench_repetitions=$AUTO_BENCH_REPETITIONS"
 } > "$ARTIFACT_DIR/run_meta.txt"
 
-system_profiler SPHardwareDataType SPDisplaysDataType > "$ARTIFACT_DIR/system_profile.txt"
+python3 - "$ARTIFACT_DIR/system_profile.txt" <<'PY'
+import pathlib
+import subprocess
+import sys
+
+output_path = pathlib.Path(sys.argv[1])
+text = subprocess.check_output(
+    ["system_profiler", "SPHardwareDataType", "SPDisplaysDataType"],
+    text=True,
+)
+redacted_lines = []
+for line in text.splitlines():
+    stripped = line.lstrip()
+    indent = line[: len(line) - len(stripped)]
+    if stripped.startswith("Serial Number (system):"):
+        redacted_lines.append(f"{indent}Serial Number (system): [redacted]")
+    elif stripped.startswith("Hardware UUID:"):
+        redacted_lines.append(f"{indent}Hardware UUID: [redacted]")
+    elif stripped.startswith("Provisioning UDID:"):
+        redacted_lines.append(f"{indent}Provisioning UDID: [redacted]")
+    else:
+        redacted_lines.append(line)
+output_path.write_text("\n".join(redacted_lines) + "\n")
+PY
 sw_vers > "$ARTIFACT_DIR/sw_vers.txt"
 git -C "$ROOT_DIR" rev-parse HEAD > "$ARTIFACT_DIR/git_rev.txt"
 
@@ -219,17 +242,47 @@ delta = auto_gen["avg_ts"] - best["gen_tps"]
 delta_pct = (delta / best["gen_tps"] * 100.0) if best["gen_tps"] else 0.0
 auto_matches_best = auto_gen["avg_ts"] >= (best["gen_tps"] * 0.97)
 summary = artifact_dir / "summary.md"
+system_fields = [
+    ("model_name", "model_name"),
+    ("model_identifier", "model_identifier"),
+    ("model_number", "model_number"),
+    ("chip", "chip"),
+    ("cpu_cores", "cpu_cores"),
+    ("cpu_total_cores", "cpu_total_cores"),
+    ("cpu_performance_cores", "cpu_performance_cores"),
+    ("cpu_efficiency_cores", "cpu_efficiency_cores"),
+    ("cpu_physical_cores", "cpu_physical_cores"),
+    ("cpu_logical_cores", "cpu_logical_cores"),
+    ("gpu_name", "gpu_name"),
+    ("gpu_cores", "gpu_cores"),
+    ("npu_visible", "npu_visible"),
+    ("npu_device_count", "npu_device_count"),
+    ("npu_visible_devices", "npu_visible_devices"),
+    ("npu_core_count", "npu_core_count"),
+    ("memory", "memory"),
+    ("memory_bytes", "memory_bytes"),
+    ("memory_bytes_usable", "memory_bytes_usable"),
+    ("unified_memory", "unified_memory"),
+    ("metal_support", "metal_support"),
+    ("system_firmware", "system_firmware"),
+    ("os_loader_version", "os_loader_version"),
+]
+system_lines = []
+for key, label in system_fields:
+    value = probe["system"].get(key)
+    if value is None:
+        continue
+    if isinstance(value, list):
+        value = ", ".join(str(item) for item in value)
+    system_lines.append(f"- {label}: {value}")
+
 summary.write_text(
     "\n".join(
         [
             "# Apple Silicon Validation Summary",
             "",
             "## System",
-            f"- chip: {probe['system'].get('chip', 'unknown')}",
-            f"- cpu_cores: {probe['system'].get('cpu_cores', 'unknown')}",
-            f"- gpu_cores: {probe['system'].get('gpu_cores', 'unknown')}",
-            f"- memory: {probe['system'].get('memory', 'unknown')}",
-            f"- metal_support: {probe['system'].get('metal_support', 'unknown')}",
+            *system_lines,
             f"- model: {probe['model']}",
             "",
             "## Device Exposure",

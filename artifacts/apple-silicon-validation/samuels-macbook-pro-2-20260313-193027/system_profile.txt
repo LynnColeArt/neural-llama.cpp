@@ -10,9 +10,9 @@ Hardware:
       Memory: 128 GB
       System Firmware Version: 13822.81.10
       OS Loader Version: 13822.81.10
-      Serial Number (system): MXTQ0464JH
-      Hardware UUID: 5BE4EFC6-2DA3-594C-9B02-2BAFC8D17A14
-      Provisioning UDID: 00006031-001261DC3668001C
+      Serial Number (system): [redacted]
+      Hardware UUID: [redacted]
+      Provisioning UDID: [redacted]
       Activation Lock Status: Enabled
 
 Graphics/Displays:

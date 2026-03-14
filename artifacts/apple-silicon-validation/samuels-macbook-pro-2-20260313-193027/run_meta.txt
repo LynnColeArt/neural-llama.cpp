@@ -1,5 +1,5 @@
 model=/Users/sam/Library/Caches/llama.cpp/ggml-org_gemma-3-1b-it-GGUF_gemma-3-1b-it-Q4_K_M.gguf
 build_dir=/Users/sam/Documents/git/crucible/neural-llama/build-apple-silicon
-timestamp=20260313-192926
+timestamp=20260313-200204
 probe_repetitions=3
 auto_bench_repetitions=1
