@@ -12,50 +12,17 @@ Files:
 
 ## M1 Max Reproduction
 
-Run the same profiler on the M1 Max from `sam/technique-matrix` after building
-`build-apple-silicon` there:
+Run this from `sam/technique-matrix` on the M1 Max:
 
 ```sh
-python3 scripts/profile_technique_matrix.py \
-  --server-bin build-apple-silicon/bin/llama-server \
+./scripts/run_technique_matrix_capture.sh \
   --model "$HOME/Library/Caches/llama.cpp/ggml-org_gemma-3-1b-it-GGUF_gemma-3-1b-it-Q4_K_M.gguf" \
-  --device MTL0 \
-  --parallel 4 \
-  --kv-unified \
-  --cache-type-k f16 \
-  --cache-type-v f16 \
-  --n-gpu-layers 999 \
-  --n-predict 32 \
-  --rounds 2 \
-  --trials 2 \
-  --output json \
-  > artifacts/perf-comparisons/technique-matrix-m1-gemma1b/technique_matrix.json
+  --label technique-matrix-m1-gemma1b
 ```
 
-Then render a readable summary:
+That single command will build `llama-server` if needed, run the matrix, write
+the artifact bundle, and print the recommendation to the console.
 
-```sh
-python3 - <<'PY'
-import json
-from pathlib import Path
-p = json.loads(Path('artifacts/perf-comparisons/technique-matrix-m1-gemma1b/technique_matrix.json').read_text())
-lines = [
-    '# Technique Matrix M1 Max Gemma 1B',
-    '',
-    f"- model: `{p['model']}`",
-    f"- device: `{p['device']}`",
-    f"- parallel: `{p['parallel']}`",
-    f"- kv_unified: `{p['kv_unified']}`",
-    '',
-    '## Granularity',
-    '',
-    f"- recommendation: `{p['analysis']['granularity_recommendation']['mode']}`",
-    f"- reason: {p['analysis']['granularity_recommendation']['reason']}",
-]
-Path('artifacts/perf-comparisons/technique-matrix-m1-gemma1b/technique_matrix.md').write_text('\n'.join(lines) + '\n')
-PY
-```
-
-Commit the resulting `artifacts/perf-comparisons/technique-matrix-m1-gemma1b/`
+Then commit the resulting `artifacts/perf-comparisons/technique-matrix-m1-gemma1b/`
 directory back to this branch so the recommendation can be compared directly
 against the M3 Max run.
