@@ -143,6 +143,33 @@ The underlying probe matrix is in:
   buffers on `MTL0`, so the current `COREML0` path is still Metal-routed in
   practice on this branch.
 
+## Combined Branch Check
+
+The combined branch `sam/apple-silicon-generalization-hot-resident` was also
+validated in isolation on the same M3 Max. The full bundle is committed at:
+
+- `artifacts/apple-silicon-validation/samuels-macbook-pro-2-20260313-203957-combined-hot-resident/`
+
+The quick-read verdict is in:
+
+- `artifacts/apple-silicon-validation/samuels-macbook-pro-2-20260313-203957-combined-hot-resident/summary.md`
+
+Relative to the earlier Apple-Silicon-only branch artifact above:
+
+- `auto` generation throughput moved from `216.44` to `214.99` tok/s
+  (`-0.67%`)
+- explicit `metal_full999` moved from `215.36` to `214.13` tok/s (`-0.57%`)
+- explicit `coreml_full999` stayed effectively unchanged (`197.99` to `197.98`
+  tok/s)
+
+Interpretation:
+
+- combining the resident hot-parking change with the Apple Silicon default
+  selection work did not introduce a meaningful backend regression on the M3
+  Max
+- the best explicit backend remained `MTL0 --n-gpu-layers 999`
+- `auto` still tracked the best explicit path closely
+
 ## Current Takeaway
 
 - The older M1 Max baseline proves that `COREML0 --n-gpu-layers 999` was a
