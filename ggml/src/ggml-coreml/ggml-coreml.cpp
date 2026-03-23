@@ -48,6 +48,28 @@ static ggml_backend_t ggml_backend_coreml_from_metal_backend(ggml_backend_t back
     return backend_ctx->metal_backend;
 }
 
+static std::string ggml_coreml_delegate_backend_name(ggml_backend_dev_t metal_dev) {
+    return metal_dev != nullptr ? ggml_backend_dev_name(metal_dev) : "METAL";
+}
+
+static std::string ggml_coreml_device_description(ggml_backend_dev_t metal_dev) {
+    return std::string("Apple Silicon CoreML experiment (delegates to ")
+        + ggml_coreml_delegate_backend_name(metal_dev)
+        + ")";
+}
+
+static void ggml_coreml_log_delegate_warning_once(ggml_backend_dev_t metal_dev) {
+    static std::once_flag once;
+    const std::string delegate_name = ggml_coreml_delegate_backend_name(metal_dev);
+    std::call_once(once, [delegate_name]() {
+        GGML_LOG_WARN(
+            "%s: COREML backends in this fork currently delegate execution and buffers through %s; benchmark against explicit METAL before using COREML as a default\n",
+            __func__,
+            delegate_name.c_str()
+        );
+    });
+}
+
 static std::string ggml_coreml_to_lower(const std::string & input) {
     std::string lower = input;
     std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) {
@@ -339,6 +361,7 @@ static void ggml_backend_coreml_device_get_props(ggml_backend_dev_t dev, ggml_ba
 
 static ggml_backend_t ggml_backend_coreml_init_from_dev(ggml_backend_dev_t dev, const char * params) {
     auto * coreml_ctx = (ggml_coreml_device_context_t)dev->context;
+    ggml_coreml_log_delegate_warning_once(coreml_ctx->metal_dev);
     ggml_backend_t metal_backend = ggml_backend_dev_init(coreml_ctx->metal_dev, params);
     if (metal_backend == NULL) {
         return NULL;
@@ -466,7 +489,7 @@ static ggml_backend_dev_t ggml_backend_coreml_device_new(ggml_backend_reg_t reg,
     auto * coreml_dev = new ggml_backend_coreml_device {
         /* .metal_dev   = */ metal_dev,
         /* .name        = */ std::string(GGML_COREML_NAME) + std::to_string(index),
-        /* .description = */ std::string("Apple Silicon NPU (CoreML backend)"),
+        /* .description = */ ggml_coreml_device_description(metal_dev),
     };
 
     return new ggml_backend_device {
