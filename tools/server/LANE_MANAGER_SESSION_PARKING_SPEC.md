@@ -27,9 +27,35 @@ Implementation tracking for this experiment lives in:
 
 - Resume fidelity target is whole-request continuity only.
 - `1`, `2`, and `4` hot lanes are treated as benchmark questions, not constants.
+- Idle same-session lanes may stay resident as hot parked state; serialized cold parking is the spill path under lane pressure.
 - Parent/child lineage influences priority, not hard affinity.
 - Parked session state is process-local in v1.
 - External API stays unchanged; scheduler metadata is private.
+
+## Validation Snapshot
+
+Focused validation for the resident hot-parking change was run against the tiny stories test model
+(`ggml-org/test-model-stories260K`) with:
+
+- `--n-predict 1`
+- `--ctx-size 2048`
+- a long shared prefix to make reuse and restore behavior dominate the request
+- `5` trials per scenario and `24` requests per trial
+- completion latency measured from `/completion` only; `/metrics` was collected once after each scenario so observability overhead did not pollute the timing
+
+Observed results on this branch versus commit `6b5a75b1`:
+
+- `2` slots, same-session hot reuse:
+  - median completion latency improved by `6.3%`
+  - parked-session restore attempts dropped from `23` to `0`
+  - output bytes and `prompt_n` matched baseline across all trials
+- `1` slot, forced session displacement:
+  - median completion latency improved by `1.8%`
+  - restore attempts stayed unchanged at `22`
+  - output bytes and `prompt_n` matched baseline across all trials
+
+The implementation intentionally does not keep single-slot sessions resident. That policy preserved the
+multi-slot reuse win without introducing a displacement regression in the one-slot case.
 - No mid-stream migration or durable parking in v1.
 
 ## Problem statement
