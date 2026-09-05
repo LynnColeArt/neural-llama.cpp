@@ -1,112 +1,113 @@
+* @samuelgoff
 # collaborators can optionally add themselves here to indicate their availability for reviewing related PRs
 # multiplie collaborators per item can be specified
 
-/.devops/*.Dockerfile                   @ngxson
-/.github/actions/                       @CISC
-/.github/workflows/                     @CISC
-/ci/                                    @ggerganov
-/cmake/                                 @ggerganov
-/common/CMakeLists.txt                  @ggerganov
-/common/arg.*                           @ggerganov
-/common/base64.hpp.*                    @ggerganov
-/common/build-info.*                    @ggerganov
-/common/chat.*                          @pwilkin
-/common/chat-peg-parser.*               @aldehir
-/common/common.*                        @ggerganov
-/common/console.*                       @ggerganov
-/common/http.*                          @angt
-/common/jinja/                          @ngxson @CISC @aldehir
-/common/llguidance.*                    @ggerganov
-/common/log.*                           @ggerganov
-/common/ngram-map.*                     @srogmann
-/common/peg-parser.*                    @aldehir
-/common/sampling.*                      @ggerganov
-/common/speculative.*                   @ggerganov
-/common/unicode.*                       @aldehir
-/convert_*.py                           @CISC
-/examples/batched.swift/                @ggerganov
-/examples/batched/                      @ggerganov
-/examples/convert-llama2c-to-ggml/      @ggerganov
-/examples/debug/                        @danbev @pwilkin
-/examples/deprecation-warning/          @ggerganov
-/examples/diffusion/                    @am17an
-/examples/embedding/                    @ggerganov
-/examples/eval-callback/                @ggerganov
-/examples/export-docs/                  @ggerganov
-/examples/gen-docs/                     @ggerganov
-/examples/gguf/                         @ggerganov
-/examples/llama.android/                @ggerganov @hanyin-arm @naco-siren
-/examples/llama.swiftui/                @ggerganov
-/examples/llama.vim                     @ggerganov
-/examples/lookahead/                    @ggerganov
-/examples/lookup/                       @JohannesGaessler
-/examples/model-conversion/             @danbev
-/examples/parallel/                     @ggerganov
-/examples/passkey/                      @ggerganov
-/examples/retrieval/                    @ggerganov
-/examples/save-load-state/              @ggerganov
-/examples/speculative-simple/           @ggerganov
-/examples/speculative/                  @ggerganov
-/ggml/cmake/                            @ggerganov
-/ggml/include/                          @ggerganov
-/ggml/src/ggml-common.h                 @ggerganov
-/ggml/src/ggml-cpu/                     @ggerganov
-/ggml/src/ggml-cpu/spacemit/            @alex-spacemit
-/ggml/src/ggml-cuda/fattn*              @JohannesGaessler
-/ggml/src/ggml-cuda/mmf.*               @JohannesGaessler @am17an
-/ggml/src/ggml-cuda/mmq.*               @JohannesGaessler
-/ggml/src/ggml-cuda/mmvf.*              @JohannesGaessler
-/ggml/src/ggml-cuda/mmvq.*              @JohannesGaessler
-/ggml/src/ggml-cuda/fattn-wmma*         @IMbackK
-/ggml/src/ggml-hip/                     @IMbackK
-/ggml/src/ggml-cuda/vendors/hip.h       @IMbackK
-/ggml/src/ggml-impl.h                   @ggerganov
-/ggml/src/ggml-metal/                   @ggerganov
-/ggml/src/ggml-opencl/                  @lhez @max-krasnyansky
-/ggml/src/ggml-hexagon/                 @max-krasnyansky @lhez
-/ggml/src/ggml-opt.cpp                  @JohannesGaessler
-/ggml/src/ggml-quants.*                 @ggerganov
-/ggml/src/ggml-rpc/                     @rgerganov
-/ggml/src/ggml-threading.*              @ggerganov
-/ggml/src/ggml-vulkan/                  @0cc4m
-/ggml/src/ggml-virtgpu/                 @kpouget
-/ggml/src/ggml-webgpu/                  @reeselevine
-/ggml/src/ggml-zdnn/                    @taronaeo @Andreas-Krebbel @AlekseiNikiforovIBM
-/ggml/src/ggml.c                        @ggerganov
-/ggml/src/ggml.cpp                      @ggerganov
-/ggml/src/gguf.cpp                      @JohannesGaessler @Green-Sky
-/gguf-py/                               @CISC
-/media/                                 @ggerganov
-/scripts/gen*                           @ggerganov
-/scripts/get*                           @ggerganov
-/scripts/sync*                          @ggerganov
-/src/                                   @ggerganov
-/src/llama-adapter.*                    @CISC
-/src/llama-arch.*                       @CISC
-/src/llama-chat.*                       @ngxson
-/src/llama-graph.*                      @CISC
-/src/llama-model.*                      @CISC
-/src/llama-vocab.*                      @CISC
-/src/models/                            @CISC
-/tests/                                 @ggerganov
-/tests/test-chat-.*                     @pwilkin
-/tools/batched-bench/                   @ggerganov
-/tools/cli/                             @ngxson
-/tools/completion/                      @ggerganov
-/tools/mtmd/                            @ngxson
-/tools/perplexity/                      @ggerganov
-/tools/quantize/                        @ggerganov
-/tools/rpc/                             @rgerganov
-/tools/server/*                         @ngxson @ggerganov # no subdir
-/tools/server/webui/                    @allozaur
-/tools/tokenize/                        @ggerganov
-/tools/tts/                             @ggerganov
-/vendor/                                @ggerganov
-/AUTHORS                                @ggerganov
-/CMakeLists.txt                         @ggerganov
-/CONTRIBUTING.md                        @ggerganov
-/LICENSE                                @ggerganov
-/README.md                              @ggerganov
-/SECURITY.md                            @ggerganov
-/build-xcframework.sh                   @danbev
-requirements*.txt                       @CISC
+/.devops/*.Dockerfile                   @ngxson @samuelgoff
+/.github/actions/                       @CISC @samuelgoff
+/.github/workflows/                     @CISC @samuelgoff
+/ci/                                    @ggerganov @samuelgoff
+/cmake/                                 @ggerganov @samuelgoff
+/common/CMakeLists.txt                  @ggerganov @samuelgoff
+/common/arg.*                           @ggerganov @samuelgoff
+/common/base64.hpp.*                    @ggerganov @samuelgoff
+/common/build-info.*                    @ggerganov @samuelgoff
+/common/chat.*                          @pwilkin @samuelgoff
+/common/chat-peg-parser.*               @aldehir @samuelgoff
+/common/common.*                        @ggerganov @samuelgoff
+/common/console.*                       @ggerganov @samuelgoff
+/common/http.*                          @angt @samuelgoff
+/common/jinja/                          @ngxson @CISC @aldehir @samuelgoff
+/common/llguidance.*                    @ggerganov @samuelgoff
+/common/log.*                           @ggerganov @samuelgoff
+/common/ngram-map.*                     @srogmann @samuelgoff
+/common/peg-parser.*                    @aldehir @samuelgoff
+/common/sampling.*                      @ggerganov @samuelgoff
+/common/speculative.*                   @ggerganov @samuelgoff
+/common/unicode.*                       @aldehir @samuelgoff
+/convert_*.py                           @CISC @samuelgoff
+/examples/batched.swift/                @ggerganov @samuelgoff
+/examples/batched/                      @ggerganov @samuelgoff
+/examples/convert-llama2c-to-ggml/      @ggerganov @samuelgoff
+/examples/debug/                        @danbev @pwilkin @samuelgoff
+/examples/deprecation-warning/          @ggerganov @samuelgoff
+/examples/diffusion/                    @am17an @samuelgoff
+/examples/embedding/                    @ggerganov @samuelgoff
+/examples/eval-callback/                @ggerganov @samuelgoff
+/examples/export-docs/                  @ggerganov @samuelgoff
+/examples/gen-docs/                     @ggerganov @samuelgoff
+/examples/gguf/                         @ggerganov @samuelgoff
+/examples/llama.android/                @ggerganov @hanyin-arm @naco-siren @samuelgoff
+/examples/llama.swiftui/                @ggerganov @samuelgoff
+/examples/llama.vim                     @ggerganov @samuelgoff
+/examples/lookahead/                    @ggerganov @samuelgoff
+/examples/lookup/                       @JohannesGaessler @samuelgoff
+/examples/model-conversion/             @danbev @samuelgoff
+/examples/parallel/                     @ggerganov @samuelgoff
+/examples/passkey/                      @ggerganov @samuelgoff
+/examples/retrieval/                    @ggerganov @samuelgoff
+/examples/save-load-state/              @ggerganov @samuelgoff
+/examples/speculative-simple/           @ggerganov @samuelgoff
+/examples/speculative/                  @ggerganov @samuelgoff
+/ggml/cmake/                            @ggerganov @samuelgoff
+/ggml/include/                          @ggerganov @samuelgoff
+/ggml/src/ggml-common.h                 @ggerganov @samuelgoff
+/ggml/src/ggml-cpu/                     @ggerganov @samuelgoff
+/ggml/src/ggml-cpu/spacemit/            @alex-spacemit @samuelgoff
+/ggml/src/ggml-cuda/fattn*              @JohannesGaessler @samuelgoff
+/ggml/src/ggml-cuda/mmf.*               @JohannesGaessler @am17an @samuelgoff
+/ggml/src/ggml-cuda/mmq.*               @JohannesGaessler @samuelgoff
+/ggml/src/ggml-cuda/mmvf.*              @JohannesGaessler @samuelgoff
+/ggml/src/ggml-cuda/mmvq.*              @JohannesGaessler @samuelgoff
+/ggml/src/ggml-cuda/fattn-wmma*         @IMbackK @samuelgoff
+/ggml/src/ggml-hip/                     @IMbackK @samuelgoff
+/ggml/src/ggml-cuda/vendors/hip.h       @IMbackK @samuelgoff
+/ggml/src/ggml-impl.h                   @ggerganov @samuelgoff
+/ggml/src/ggml-metal/                   @ggerganov @samuelgoff
+/ggml/src/ggml-opencl/                  @lhez @max-krasnyansky @samuelgoff
+/ggml/src/ggml-hexagon/                 @max-krasnyansky @lhez @samuelgoff
+/ggml/src/ggml-opt.cpp                  @JohannesGaessler @samuelgoff
+/ggml/src/ggml-quants.*                 @ggerganov @samuelgoff
+/ggml/src/ggml-rpc/                     @rgerganov @samuelgoff
+/ggml/src/ggml-threading.*              @ggerganov @samuelgoff
+/ggml/src/ggml-vulkan/                  @0cc4m @samuelgoff
+/ggml/src/ggml-virtgpu/                 @kpouget @samuelgoff
+/ggml/src/ggml-webgpu/                  @reeselevine @samuelgoff
+/ggml/src/ggml-zdnn/                    @taronaeo @Andreas-Krebbel @AlekseiNikiforovIBM @samuelgoff
+/ggml/src/ggml.c                        @ggerganov @samuelgoff
+/ggml/src/ggml.cpp                      @ggerganov @samuelgoff
+/ggml/src/gguf.cpp                      @JohannesGaessler @Green-Sky @samuelgoff
+/gguf-py/                               @CISC @samuelgoff
+/media/                                 @ggerganov @samuelgoff
+/scripts/gen*                           @ggerganov @samuelgoff
+/scripts/get*                           @ggerganov @samuelgoff
+/scripts/sync*                          @ggerganov @samuelgoff
+/src/                                   @ggerganov @samuelgoff
+/src/llama-adapter.*                    @CISC @samuelgoff
+/src/llama-arch.*                       @CISC @samuelgoff
+/src/llama-chat.*                       @ngxson @samuelgoff
+/src/llama-graph.*                      @CISC @samuelgoff
+/src/llama-model.*                      @CISC @samuelgoff
+/src/llama-vocab.*                      @CISC @samuelgoff
+/src/models/                            @CISC @samuelgoff
+/tests/                                 @ggerganov @samuelgoff
+/tests/test-chat-.*                     @pwilkin @samuelgoff
+/tools/batched-bench/                   @ggerganov @samuelgoff
+/tools/cli/                             @ngxson @samuelgoff
+/tools/completion/                      @ggerganov @samuelgoff
+/tools/mtmd/                            @ngxson @samuelgoff
+/tools/perplexity/                      @ggerganov @samuelgoff
+/tools/quantize/                        @ggerganov @samuelgoff
+/tools/rpc/                             @rgerganov @samuelgoff
+/tools/server/*                         @ngxson @ggerganov @samuelgoff # no subdir
+/tools/server/webui/                    @allozaur @samuelgoff
+/tools/tokenize/                        @ggerganov @samuelgoff
+/tools/tts/                             @ggerganov @samuelgoff
+/vendor/                                @ggerganov @samuelgoff
+/AUTHORS                                @ggerganov @samuelgoff
+/CMakeLists.txt                         @ggerganov @samuelgoff
+/CONTRIBUTING.md                        @ggerganov @samuelgoff
+/LICENSE                                @ggerganov @samuelgoff
+/README.md                              @ggerganov @samuelgoff
+/SECURITY.md                            @ggerganov @samuelgoff
+/build-xcframework.sh                   @danbev @samuelgoff
+requirements*.txt                       @CISC @samuelgoff
